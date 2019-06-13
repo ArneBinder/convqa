@@ -135,12 +135,14 @@ def train():
     logger.info("Arguments: %s", pformat(args))
 
     # Initialize distributed training if needed
-    args.distributed = (args.local_rank != -1 or torch.cuda.device_count() > 1)
+    args.distributed = (args.local_rank != -1)
     if args.distributed:
-        if args.local_rank != -1:
-            torch.cuda.set_device(args.local_rank)
-            args.device = torch.device("cuda", args.local_rank)
-            torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        torch.cuda.set_device(args.local_rank)
+        args.device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        n_gpu = 1
+    else:
+        n_gpu = torch.cuda.device_count()
 
     logger.info("Prepare tokenizer, pretrained model and optimizer - add special tokens for fine-tuning")
     tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer
@@ -157,10 +159,9 @@ def train():
         from apex import amp  # Apex is only required if we use fp16 training
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16)
     if args.distributed:
-        if args.local_rank != -1:
-            model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
-        else:
-            model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
+        model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+    elif n_gpu > 1:
+        model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
     train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer)
@@ -171,6 +172,8 @@ def train():
         batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
         lm_loss, mc_loss = model(*batch)
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
+        if n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu.
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
