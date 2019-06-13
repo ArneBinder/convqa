@@ -17,4 +17,4 @@ echo "execute: $CMD"
 
 $CMD \
 --dataset_path $DATASET \
---epochs 1
+--n_epochs 1
