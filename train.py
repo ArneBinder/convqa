@@ -141,8 +141,6 @@ def train():
             torch.cuda.set_device(args.local_rank)
             args.device = torch.device("cuda", args.local_rank)
             torch.distributed.init_process_group(backend='nccl', init_method='env://')
-        else:
-            torch.distributed.init_process_group(backend="nccl")
 
     logger.info("Prepare tokenizer, pretrained model and optimizer - add special tokens for fine-tuning")
     tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer
