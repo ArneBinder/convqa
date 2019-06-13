@@ -1,6 +1,6 @@
 # create conda environment via:
-# conda create -n huggingface_playground python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl -c pytorch
-# ATTENTION: tensorboardx > 1.6 clashes with ignite=0.2.0
+# conda create -n huggingface_playground python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl -c pytorch -c conda-forge
+# ATTENTION: tensorboardx > 1.6 breaks ignite=0.2.0
 
 torch
 pytorch-ignite
