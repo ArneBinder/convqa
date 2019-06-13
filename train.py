@@ -171,9 +171,10 @@ def train():
         model.train()
         batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
         lm_loss, mc_loss = model(*batch)
-        loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
         if n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu.
+            lm_loss = lm_loss.mean()  # mean() to average on multi-gpu.
+            mc_loss = mc_loss.mean()
+        loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
