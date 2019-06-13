@@ -135,11 +135,14 @@ def train():
     logger.info("Arguments: %s", pformat(args))
 
     # Initialize distributed training if needed
-    args.distributed = (args.local_rank != -1)
+    args.distributed = (args.local_rank != -1 or torch.cuda.device_count() > 1)
     if args.distributed:
-        torch.cuda.set_device(args.local_rank)
-        args.device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        if args.local_rank != -1:
+            torch.cuda.set_device(args.local_rank)
+            args.device = torch.device("cuda", args.local_rank)
+            torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        else:
+            torch.distributed.init_process_group(backend="nccl")
 
     logger.info("Prepare tokenizer, pretrained model and optimizer - add special tokens for fine-tuning")
     tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer
@@ -156,7 +159,10 @@ def train():
         from apex import amp  # Apex is only required if we use fp16 training
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16)
     if args.distributed:
-        model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+        if args.local_rank != -1:
+            model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
+        else:
+            model = DistributedDataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
     train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer)
