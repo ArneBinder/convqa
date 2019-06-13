@@ -162,7 +162,7 @@ def train():
         if args.local_rank != -1:
             model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
         else:
-            model = DistributedDataParallel(model)  # device_ids will include all GPU devices by default
+            model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
     train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer)
