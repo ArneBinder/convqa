@@ -1,11 +1,11 @@
 # Create conda environment via:
 #   conda create -n huggingface_playground python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl -c pytorch -c conda-forge
-# ATTENTION: tensorboardx > 1.6 breaks ignite=0.2.0
+# NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
 #
-# THIS DOES NOT WORK, FIX IT!
-# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but:
+# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install its branch "gpt-2-special-tokens" from source:
 #   git clone https://github.com/huggingface/pytorch-pretrained-BERT.git
-#   <merge branch origin/gpt-2-special-tokens to master>
+#   cd pytorch-pretrained-BERT
+#   git checkout origin/gpt-2-special-tokens
 #   pip install .
 
 
