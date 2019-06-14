@@ -3,9 +3,9 @@
 # NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
 #
 # To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install its branch "gpt-2-special-tokens" from my fork:
-#   git clone https://github.com/ArneBinder/pytorch-pretrained-BERT
+#   git clone https://github.com/huggingface/pytorch-pretrained-BERT.git
 #   cd pytorch-pretrained-BERT
-#   git checkout origin/gpt-2-special-tokens
+#   git checkout attention
 #   pip install .
 
 
