@@ -45,13 +45,15 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
 def gen_personachat_extract(fn, extract_size=10):
     data = json.load(open(fn))
 
-    fn_out = fn.replace('.json', '_extract%i.json' % extract_size)
+    fn_out = fn.replace('.json', '_extract%s.json' % str(extract_size))
 
     # print dataset size
     for k in data:
         print('%s: %i' % (k, len(data[k])))
     print('write to: %s' % fn_out)
-    json.dump({k: data[k][:extract_size] for k in data}, open(fn_out, 'w'), indent=2)
+    if extract_size is not None:
+        data = {k: data[k][:extract_size] for k in data}
+    json.dump(data, open(fn_out, 'w'), indent=2)
 
 
 def create_sentencizer():
@@ -84,7 +86,7 @@ def dummy_tokenize():
 
 if __name__ == '__main__':
     #stats: train: 17878; valid: 1000
-    #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json')
+    #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
     # convert CoQA to personachat
     coqa_to_personachat()
