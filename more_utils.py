@@ -1,10 +1,52 @@
 import json
 
+import numpy as np
 import spacy
 
+# too large for memory
+def sample_neg_indices_old(n_instances, n_candidates):
+    # create index array [[0, 1, .., n_instances-1], .., [0, 1, .., n_instances-1]]
+    a = np.tile(np.arange(n_instances), n_instances).reshape((n_instances, n_instances))
+    # for each row, replace current idx with last
+    np.fill_diagonal(a, n_instances-1)
+    # truncate replaced index (last one)
+    a = a[:, :-1]
+    # shuffle each row
+    #np.random.shuffle(a.T)
+    np.apply_along_axis(np.random.shuffle, axis=1, arr=a)
+    # return first n_candidates of each row
+    return a[:, :n_candidates]
 
-def coqa_split_to_personachat(coqa_data, sentencizer):
+
+def sample_neg_candidates(instances, n_candidates, n_resample=3):
+
+    n_collisions = 0
+    nn_collisions = 0
+
+    a = np.empty(shape=(len(instances), n_candidates - 1), dtype=instances.dtype)
+    for i, inst in enumerate(instances):
+        i_sample = 0
+        a[i] = np.random.choice(instances,  n_candidates - 1)
+
+        # check for collisions with correct instance
+        # NOTE: we do not normalize the case (e.g. of the first character)!
+        collision_indices = np.nonzero(a[i] == inst)[0]
+        while len(collision_indices) > 0 and i_sample < n_resample:
+            new_samples = np.random.choice(instances,  len(collision_indices))
+            a[i][collision_indices] = new_samples
+            collision_indices = np.nonzero(a[i] == inst)[0]
+            i_sample += 1
+        if len(collision_indices) > 0:
+            nn_collisions += 1
+            n_collisions += len(collision_indices)
+
+    print('collisions: %i (in %i instances; total: %i)' % (n_collisions, nn_collisions, len(instances)))
+    return a
+
+
+def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20):
     instances = []
+    all_answers = []
     for record in coqa_data:
         instance = {}
         instance['personality'] = sentencizer(record['story'])
@@ -19,26 +61,45 @@ def coqa_split_to_personachat(coqa_data, sentencizer):
             answer_text = record['answers'][i]['input_text']
             history.append(question_text)
             utterance['history'] = history.copy()
-            utterance['candidates'] = [answer_text]
+            #utterance['candidates'] = [answer_text]
+            all_answers.append(answer_text)
             instance['utterances'].append(utterance)
             history.append(answer_text)
 
         instances.append(instance)
+    print('data created')
+
+    all_answers = np.array(all_answers)
+    sampled_neg_answers = sample_neg_candidates(instances=all_answers, n_candidates=n_candidates)
+    #all_sampled_answers = all_answers[sampled_neg_indices]
+    print('neg samples created')
+    #all_candidates = np.concatenate([sampled_neg_answers.T, [all_answers]]).T
+
+    i = 0
+    for instance in instances:
+        for j, utterance in enumerate(instance['utterances']):
+            # prepend samples
+            instance['utterances'][j]['candidates'] = sampled_neg_answers[i].tolist() + [all_answers[i]]
+            i += 1
+    print('candidates created')
 
     return instances
 
 
 def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.0.json',
                         coqa_train='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-train-v1.0.json',
-                        out='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona.json'):
+                        out='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona.json',
+                        n_candidates=20):
     sentencizer = create_sentencizer()
     print('convert dev...')
     coqa_dev = json.load(open(coqa_dev))['data']
-    coqa_converted_dev = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer)
+    coqa_converted_dev = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer, n_candidates=n_candidates)
     print('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
-    coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer)
-    json.dump({'train': coqa_converted_train, 'valid': coqa_converted_dev},
+    coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer, n_candidates=n_candidates)
+    print('dump to json: %s ...' % out)
+    json.dump({'train': coqa_converted_train,
+               'valid': coqa_converted_dev},
               open(out, 'w'), indent=2)
 
 
@@ -91,7 +152,7 @@ if __name__ == '__main__':
     # convert CoQA to personachat
     coqa_to_personachat()
     # stats: train: 7199; valid: 500
-    gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona.json')
+    gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona.json', extract_size=3)
 
     #x = dummy_tokenize()
 
