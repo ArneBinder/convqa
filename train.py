@@ -36,15 +36,17 @@ def average_distributed_scalar(scalar, args):
     return scalar_t.item()
 
 
-def pad_dataset(dataset, padding=0):
+def pad_dataset(dataset, padding=0, max_sequence_length=-1):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padd only batches but this is simpler. """
     max_l = max(len(x) for x in dataset["input_ids"])
     for name in PADDED_INPUTS:
         dataset[name] = [x + [padding if name != "lm_labels" else -1] * (max_l - len(x)) for x in dataset[name]]
+        if max_sequence_length > 0:
+            dataset[name] = [x[:max_sequence_length] for x in dataset[name]]
     return dataset
 
 
-def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True, max_sequence_length=200):
+def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
     bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
 
@@ -52,8 +54,8 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
     sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
     sequence = [sequence[0]] + [[speaker2 if (len(sequence)-i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
 
-    instance["input_ids"] = list(chain(*sequence))[:max_sequence_length]
-    instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s][:max_sequence_length]
+    instance["input_ids"] = list(chain(*sequence))
+    instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
     instance["mc_token_ids"] = len(instance["input_ids"]) - 1
     instance["lm_labels"] = [-1] * len(instance["input_ids"])
     if lm_labels:
@@ -88,7 +90,8 @@ def get_data_loaders(args, tokenizer):
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
-        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
+        # TODO: load max_sequence_length from model config (n_positions)
+        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]), max_sequence_length=512)
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
             if input_name != "mc_labels":
