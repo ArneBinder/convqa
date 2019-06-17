@@ -5,7 +5,7 @@ import math
 import logging
 from pprint import pformat
 from argparse import ArgumentParser
-from collections import defaultdict
+from collections import defaultdict, Counter
 from itertools import chain
 
 import torch
@@ -38,10 +38,17 @@ def average_distributed_scalar(scalar, args):
 
 def pad_dataset(dataset, padding=0, max_sequence_length=-1):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padd only batches but this is simpler. """
-    max_l = max(len(x) for x in dataset["input_ids"])
+    l_counter = Counter((len(x) for x in dataset["input_ids"]))
+    max_l = max(l_counter.keys())
+    if 0 < max_sequence_length < max_l:
+        bigger_l = {k: l_counter[k] for k in l_counter.keys() if k > max_sequence_length}
+        # TODO: remove too long entries?
+        logger.warning('%i of %i entries exceed max_sequence_length=%i (these inputs will be truncated): \n%s'
+                       % (sum(bigger_l.values()), len(dataset["input_ids"]), max_sequence_length, bigger_l))
+
     for name in PADDED_INPUTS:
         dataset[name] = [x + [padding if name != "lm_labels" else -1] * (max_l - len(x)) for x in dataset[name]]
-        if max_sequence_length > 0:
+        if 0 < max_sequence_length < max_l:
             dataset[name] = [x[:max_sequence_length] for x in dataset[name]]
     return dataset
 
