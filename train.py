@@ -134,6 +134,8 @@ def train():
     logger.warning("Running process %d", args.local_rank)  # This is a logger.warning: it will be printed by all distributed processes
     logger.info("Arguments: %s", pformat(args))
 
+    n_gpu = 0
+
     # Initialize distributed training if needed
     args.distributed = (args.local_rank != -1)
     if args.distributed:
@@ -141,7 +143,7 @@ def train():
         args.device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
         n_gpu = 1
-    else:
+    elif args.device == 'cuda':
         n_gpu = torch.cuda.device_count()
 
     logger.info("Prepare tokenizer, pretrained model and optimizer - add special tokens for fine-tuning")
