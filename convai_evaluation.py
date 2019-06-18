@@ -37,6 +37,7 @@ class TransformerAgent(Agent):
         agent_args.add_argument("--seed", type=int, default=0)
         agent_args.add_argument("--temperature", type=int, default=0.7)
         agent_args.add_argument("--top_k", type=int, default=20)
+        agent_args.add_argument("--top_p", type=float, default=0.9, help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
         return argparser
 
     def __init__(self, opt, shared=None):
