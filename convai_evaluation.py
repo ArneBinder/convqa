@@ -149,7 +149,7 @@ class TransformerAgent(Agent):
         else:
             # We are in interactive of f1 evaluation mode => just sample
             with torch.no_grad():
-                out_ids, _ = sample_sequence(self.persona, self.history, self.tokenizer, self.model_checkpoint, self.args)
+                out_ids = sample_sequence(self.persona, self.history, self.tokenizer, self.model_checkpoint, self.args)
             out_text = self.tokenizer.decode(out_ids, skip_special_tokens=True,
                                              clean_up_tokenization_spaces=(self.args.eval_type != 'f1'))
             reply = {'text': out_text}
