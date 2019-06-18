@@ -1,4 +1,5 @@
 import json
+import os
 from collections import Counter
 
 import numpy as np
@@ -56,38 +57,64 @@ def count_sentences(s, sentencizer, counter=None):
         counter[len(sents)] +=1
     return len(sents)
 
-def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences=1):
+def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona, stats):
+    all_answers = []
+
+    was_truncated = False
+    instance = {}
+    instance['personality'] = sentencizer(record['story'])
+    if max_sentences_persona is not None:
+        stats['persona']['n_sents'][len(instance['personality'])] += 1
+        if len(instance['personality']) > max_sentences_persona:
+            was_truncated = True
+        instance['personality'] = instance['personality'][:max_sentences_persona]
+
+    assert len(record['questions']) == len(record['answers']), 'number of questions / answers mismatch'
+    instance['utterances'] = []
+    history = []
+    for i in range(len(record['questions'])):
+        utterance = {}
+        assert record['questions'][i]['turn_id'] == record['answers'][i]['turn_id'] == i + 1, 'turn_id mismatch'
+        question_text = record['questions'][i]['input_text']
+        answer_text = record['answers'][i]['input_text']
+        # skip answer-question pairs if number of sentences in one of them > max_sentences
+        continue_this = False
+        if max_sentences_qa and count_sentences(s=question_text, sentencizer=sentencizer,
+                                                counter=stats['question']['n_sents']) > max_sentences_qa:
+            continue_this = True
+        if max_sentences_qa and count_sentences(s=answer_text, sentencizer=sentencizer,
+                                                counter=stats['answer']['n_sents']) > max_sentences_qa:
+            continue_this = True
+        if continue_this:
+            was_truncated = True
+            continue
+
+        history.append(question_text)
+        utterance['history'] = history.copy()
+        # utterance['candidates'] = [answer_text]
+        all_answers.append(answer_text)
+        instance['utterances'].append(utterance)
+        history.append(answer_text)
+
+    return instance, all_answers, was_truncated
+
+def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences_qa=1, max_sentences_persona=None):
     instances = []
     all_answers = []
-    stats = {'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
+    stats = {'persona':{'n_sents': Counter()}, 'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
+    n_skipped = 0
     for record in coqa_data:
-        instance = {}
-        instance['personality'] = sentencizer(record['story'])
-
-        assert len(record['questions']) == len(record['answers']), 'number of questions / answers mismatch'
-        instance['utterances'] = []
-        history = []
-        for i in range(len(record['questions'])):
-            utterance = {}
-            assert record['questions'][i]['turn_id'] == record['answers'][i]['turn_id'] == i + 1, 'turn_id mismatch'
-            question_text = record['questions'][i]['input_text']
-            answer_text = record['answers'][i]['input_text']
-            # skip answer-question pairs if number of sentences in one of them > max_sentences
-            if max_sentences and count_sentences(s=question_text, sentencizer=sentencizer, counter=stats['question']['n_sents']) > max_sentences:
-                continue
-            if max_sentences and count_sentences(s=answer_text, sentencizer=sentencizer, counter=stats['answer']['n_sents']) > max_sentences:
-                continue
-
-            history.append(question_text)
-            utterance['history'] = history.copy()
-            #utterance['candidates'] = [answer_text]
-            all_answers.append(answer_text)
-            instance['utterances'].append(utterance)
-            history.append(answer_text)
-
+        instance, current_answers, was_truncated = create_instance(record=record, sentencizer=sentencizer,
+                                                        max_sentences_qa=max_sentences_qa,
+                                                        max_sentences_persona=max_sentences_persona, stats=stats)
+        if was_truncated:
+            n_skipped += 1
+            continue
         instances.append(instance)
-    print('data created')
-    print('max_sentences: %i' % max_sentences)
+        all_answers.extend(current_answers)
+    print('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
+    print('max_sentences_persona: %s' % str(max_sentences_persona))
+    print('max_sentences_qa: %s' % str(max_sentences_qa))
     print(stats)
 
     all_answers = np.array(all_answers)
@@ -109,18 +136,29 @@ def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sente
 
 def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.0.json',
                         coqa_train='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-train-v1.0.json',
-                        out='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona_maxsent1.json',
+                        out=None,
                         n_candidates=20,
-                        max_sentences=1):
+                        max_sents_qa=1,
+                        max_sents_persona=2):
+    if out is None:
+        fn = 'coqa_converted_persona'
+        if max_sents_qa and max_sents_qa >= 0:
+            fn += '_sentsqa%i' % max_sents_qa
+        if max_sents_persona and max_sents_persona >= 0:
+            fn += '_sentsp%i' % max_sents_persona
+        out = os.path.join(os.path.dirname(coqa_train), '%s.json' % fn)
+
     sentencizer = create_sentencizer()
     #print('convert dev...')
     coqa_dev = json.load(open(coqa_dev))['data']
     coqa_converted_dev = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
-                                                   n_candidates=n_candidates, max_sentences=max_sentences)
+                                                   n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
+                                                   max_sentences_persona=max_sents_persona)
     print('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
     coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
-                                                     n_candidates=n_candidates, max_sentences=max_sentences)
+                                                     n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
+                                                     max_sentences_persona=max_sents_persona)
     print('dump to json: %s ...' % out)
     json.dump({'train': coqa_converted_train,
                'valid': coqa_converted_dev
@@ -177,9 +215,9 @@ if __name__ == '__main__':
     #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
     # convert CoQA to personachat
-    #coqa_to_personachat()
+    #coqa_to_personachat(max_sents_persona=20)
     # stats: train: 7199; valid: 500
-    gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona.json', extract_size=10, start_idx=10)
+    #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona_sentsqa1_sentsp20.json', extract_size=100, start_idx=0)
 
     #x = dummy_tokenize()
 
