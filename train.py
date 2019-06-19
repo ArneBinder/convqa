@@ -179,6 +179,7 @@ def train():
     model.set_num_special_tokens(len(SPECIAL_TOKENS))
     model.to(args.device)
     optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
+    model_config = model.config
 
     # Prepare model for FP16 and distributed training if needed (order is important, distributed should be the last)
     if args.fp16:
@@ -190,7 +191,7 @@ def train():
         model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=model.config.n_ctx) #, return_strings=True)
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=model_config.n_ctx) #, return_strings=True)
 
     # Training function and trainer
     def update(engine, batch):
