@@ -190,8 +190,7 @@ def train():
         model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
-    # TODO: load max_sequence_length from model config (n_positions)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=512) #, return_strings=True)
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=model.config.n_ctx) #, return_strings=True)
 
     # Training function and trainer
     def update(engine, batch):
