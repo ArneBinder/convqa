@@ -82,6 +82,8 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     logger.info("Build inputs and labels")
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     for dataset_name, dataset in personachat.items():
+        n = 0
+        counter_truncated = Counter()
         num_candidates = len(dataset[0]["utterances"][0]["candidates"])
         if args.num_candidates > 0 and dataset_name == 'train':
             num_candidates = min(args.num_candidates, num_candidates)
@@ -92,12 +94,18 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                     history = utterance["history"][-(2*args.max_history+1):]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         lm_labels = bool(j == num_candidates-1)
-                        instance, _ = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings, max_sequence_length=max_sequence_length)
+                        instance, sequence = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings, max_sequence_length=max_sequence_length)
+                        l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
+                        if l_trunc > 0:
+                            counter_truncated[l_trunc] += 1
                         for input_name, input_array in instance.items():
                             datasets[dataset_name][input_name].append(input_array)
+                        n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
                 persona = [persona[-1]] + persona[:-1]  # permuted personalities
+        logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
+        logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
 
     assert not as_strings, 'return_strings has to be False'
 
