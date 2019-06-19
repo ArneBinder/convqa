@@ -36,24 +36,21 @@ def average_distributed_scalar(scalar, args):
     return scalar_t.item()
 
 
-def pad_dataset(dataset, padding=0, max_sequence_length=-1):
+def pad_dataset(dataset, padding=0):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padd only batches but this is simpler. """
     l_counter = Counter((len(x) for x in dataset["input_ids"]))
     max_l = max(l_counter.keys())
-    if 0 < max_sequence_length < max_l:
-        bigger_l = {k: l_counter[k] for k in l_counter.keys() if k > max_sequence_length}
-        # TODO: remove too long entries?
-        logger.warning('%i of %i entries exceed max_sequence_length=%i (these inputs will be truncated): \n%s'
-                       % (sum(bigger_l.values()), len(dataset["input_ids"]), max_sequence_length, bigger_l))
+    #if 0 < max_sequence_length < max_l:
+    #    bigger_l = {k: l_counter[k] for k in l_counter.keys() if k > max_sequence_length}
+    #    logger.warning('%i of %i entries exceed max_sequence_length=%i (these inputs will be truncated): \n%s'
+    #                   % (sum(bigger_l.values()), len(dataset["input_ids"]), max_sequence_length, bigger_l))
 
     for name in PADDED_INPUTS:
         dataset[name] = [x + [padding if name != "lm_labels" else -1] * (max_l - len(x)) for x in dataset[name]]
-        if 0 < max_sequence_length < max_l:
-            dataset[name] = [x[:max_sequence_length] for x in dataset[name]]
     return dataset
 
 
-def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True, return_strings=False):
+def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True, return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
     if return_strings:
         bos, eos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
@@ -66,14 +63,19 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
 
     instance["input_ids"] = list(chain(*sequence))
     instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+    if max_sequence_length:
+        instance["input_ids"] = instance["input_ids"][:max_sequence_length]
+        instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
     instance["mc_token_ids"] = len(instance["input_ids"]) - 1
     instance["lm_labels"] = [-1] * len(instance["input_ids"])
     if lm_labels:
         instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:]
+        if max_sequence_length:
+            instance["lm_labels"] = instance["lm_labels"][:max_sequence_length]
     return instance, sequence
 
 
-def get_data_loaders(args, tokenizer, as_strings=False):
+def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None):
     """ Prepare the dataset for training and evaluation """
     personachat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, as_strings=as_strings)
 
@@ -90,7 +92,7 @@ def get_data_loaders(args, tokenizer, as_strings=False):
                     history = utterance["history"][-(2*args.max_history+1):]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         lm_labels = bool(j == num_candidates-1)
-                        instance, _ = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings)
+                        instance, _ = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings, max_sequence_length=max_sequence_length)
                         for input_name, input_array in instance.items():
                             datasets[dataset_name][input_name].append(input_array)
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
@@ -102,8 +104,7 @@ def get_data_loaders(args, tokenizer, as_strings=False):
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
-        # TODO: load max_sequence_length from model config (n_positions)
-        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]), max_sequence_length=512)
+        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
             if input_name != "mc_labels":
@@ -181,7 +182,8 @@ def train():
         model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer) #, return_strings=True)
+    # TODO: load max_sequence_length from model config (n_positions)
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=512) #, return_strings=True)
 
     # Training function and trainer
     def update(engine, batch):
