@@ -44,9 +44,12 @@ def pad_dataset(dataset, padding=0):
     return dataset
 
 
-def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True):
+def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True, return_strings=False):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
-    bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
+    if return_strings:
+        bos, eos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
+    else:
+        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
 
     instance = {}
     sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
@@ -61,9 +64,9 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
     return instance, sequence
 
 
-def get_data_loaders(args, tokenizer):
+def get_data_loaders(args, tokenizer, as_strings=False):
     """ Prepare the dataset for training and evaluation """
-    personachat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+    personachat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, as_strings=as_strings)
 
     logger.info("Build inputs and labels")
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
@@ -78,12 +81,14 @@ def get_data_loaders(args, tokenizer):
                     history = utterance["history"][-(2*args.max_history+1):]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         lm_labels = bool(j == num_candidates-1)
-                        instance, _ = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels)
+                        instance, _ = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings)
                         for input_name, input_array in instance.items():
                             datasets[dataset_name][input_name].append(input_array)
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
                 persona = [persona[-1]] + persona[:-1]  # permuted personalities
+
+    assert not as_strings, 'return_strings has to be False'
 
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
@@ -159,7 +164,7 @@ def train():
         model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
 
     logger.info("Prepare datasets")
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer)
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer) #, return_strings=True)
 
     # Training function and trainer
     def update(engine, batch):
