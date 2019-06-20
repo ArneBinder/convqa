@@ -54,7 +54,7 @@ Validation: {'accuracy': 0.7953745600804424,
  'average_nll': 1.2890385170319123,
  'average_ppl': 3.6292953719785754,
  'nll': 1.2890385170319123}
-cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --model openai-gpt --model_checkpoint runs/Jun19_14-49-28_serv-9200 --max_history 2`
+cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun19_14-49-28_serv-9200 --max_history 2 --start_endpoint`
 
 
 ## todo
