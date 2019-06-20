@@ -149,7 +149,6 @@ def hello_world():
 
 @endpoint.route("/ask")
 def ask():
-
     try:
         start = time.time()
         logging.info('prediction requested')
@@ -157,15 +156,15 @@ def ask():
         history = params.get('history', [])
         question = params['question']
         with endpoint.app_context():
-            history.append(g.tokenizer.encode(question))
-            personality_encoded = [g.tokenizer.encode(sentence) for sentence in params['personality']]
-            history_encoded = [g.tokenizer.encode(utterance) for utterance in history]
+            history.append(tokenizer.encode(question))
+            personality_encoded = [tokenizer.encode(sentence) for sentence in params['personality']]
+            history_encoded = [tokenizer.encode(utterance) for utterance in history]
             with torch.no_grad():
-                out_ids = sample_sequence(personality_encoded, history_encoded, g.tokenizer, g.model, g.model_args)
+                out_ids = sample_sequence(personality_encoded, history_encoded, tokenizer, model, args)
             history_encoded.append(out_ids)
-            history_encoded = history_encoded[-(2 * g.model_args.max_history + 1):]
-            params['prediction'] = g.tokenizer.decode(out_ids, skip_special_tokens=True)
-            params['history'] = [g.tokenizer.decode(utterance) for utterance in history_encoded]
+            history_encoded = history_encoded[-(2 * args.max_history + 1):]
+            params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
+            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
             logger.debug('predicted:\n%s' % params['prediction'])
 
         return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
@@ -178,7 +177,7 @@ def ask():
     return response
 
 
-def run():
+def init():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
@@ -216,17 +215,13 @@ def run():
     model.to(args.device)
     model.eval()
 
-    history = []
-    if args.start_endpoint:
-        with endpoint.app_context():
-            g.tokenizer = tokenizer
-            g.model = model
-            g.model_args = args
+    return tokenizer, model, args
 
+
+def run(tokenizer, model, args):
+    if args.start_endpoint:
         logger.info('Starting the API')
         endpoint.run(host='0.0.0.0', port=5000)
-
-
     else:
         logger.info("Sample a personality")
         personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
@@ -250,4 +245,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__file__)
 
-    run()
+    tokenizer, model, args = init()
+    run(tokenizer, model, args)
+
