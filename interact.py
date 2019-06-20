@@ -11,6 +11,7 @@ import sys
 import time
 import traceback
 from argparse import ArgumentParser
+from collections import Counter
 from itertools import chain
 from pprint import pformat
 
@@ -18,6 +19,8 @@ import torch
 import torch.nn.functional as F
 
 from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2LMHeadModel, GPT2Tokenizer
+
+from more_utils import create_sentencizer
 from train import SPECIAL_TOKENS, build_input_from_segments
 from utils import get_dataset_personalities, download_pretrained_model
 from flask import Flask, g, jsonify, Response, request
@@ -68,9 +71,13 @@ def sample_sequence(personality, history, tokenizer, model, args, current_output
     special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
     if current_output is None:
         current_output = []
-
+    counter_truncated = Counter()
     for i in range(args.max_length):
-        instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, with_eos=False)
+        instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, with_eos=False,
+                                                       max_sequence_length=model.config.n_ctx)
+        l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
+        if l_trunc > 0:
+            counter_truncated[l_trunc] += 1
 
         input_ids = torch.tensor(instance["input_ids"], device=args.device).unsqueeze(0)
         token_type_ids = torch.tensor(instance["token_type_ids"], device=args.device).unsqueeze(0)
@@ -91,6 +98,9 @@ def sample_sequence(personality, history, tokenizer, model, args, current_output
         if prev.item() in special_tokens_ids:
             break
         current_output.append(prev.item())
+
+    if len(counter_truncated) > 0:
+        logger.warning('sequence was truncated: num_trunc_tokens -> frequency: %s' % str(counter_truncated))
 
     return current_output
 
@@ -161,8 +171,10 @@ def ask():
         history = params.get('history', [])
         user_input = params['user_input']
 
+        context = sentencizer(params['context'])
+
         history.append(user_input)
-        context_encoded = [tokenizer.encode(sentence) for sentence in params['context']]
+        context_encoded = [tokenizer.encode(sentence) for sentence in context]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
             out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
@@ -255,5 +267,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__file__)
 
     tokenizer, model, args = init()
+    if args.start_endpoint:
+        sentencizer = create_sentencizer()
     run(tokenizer, model, args)
 

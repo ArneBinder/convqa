@@ -182,8 +182,8 @@ def gen_personachat_extract(fn, extract_size=10, start_idx=0):
     json.dump(data, open(fn_out, 'w'), indent=2)
 
 
-def create_sentencizer():
-    nlp = spacy.load('en_core_web_sm')
+def create_sentencizer(spacy_model='en_core_web_sm'):
+    nlp = spacy.load(spacy_model)
     nlp.add_pipe(nlp.create_pipe('sentencizer'))
     #sentencizer = lambda s: [sent.text for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents]
     def sentencizer(s):
