@@ -157,16 +157,15 @@ def ask():
         history = params.get('history', [])
         question = params['question']
         history.append(g.tokenizer.encode(question))
-        personality = params['personality']
+        personality_encoded = [g.tokenizer.encode(sentence) for sentence in params['personality']]
+        history_encoded = [g.tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
-            out_ids = sample_sequence(personality, history, g.tokenizer, g.model, g.model_args)
-        history.append(out_ids)
-        history = history[-(2 * g.model_args.max_history + 1):]
-        out_text = g.tokenizer.decode(out_ids, skip_special_tokens=True)
-
-        params['history'] = history
-        params['result'] = out_text
-        logger.debug('predicted:\n%s' % out_text)
+            out_ids = sample_sequence(personality_encoded, history_encoded, g.tokenizer, g.model, g.model_args)
+        history_encoded.append(out_ids)
+        history_encoded = history_encoded[-(2 * g.model_args.max_history + 1):]
+        params['prediction'] = g.tokenizer.decode(out_ids, skip_special_tokens=True)
+        params['history'] = [g.tokenizer.decode(utterance) for utterance in history_encoded]
+        logger.debug('predicted:\n%s' % params['prediction'])
 
         return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
         json_data = json.dumps(params)
