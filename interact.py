@@ -250,11 +250,14 @@ def run(tokenizer, model, args):
         data = json.load(open(args.coqa_file))
         assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). This is required to process a CoQA dataset file.'
         predictions = []
+        n_errors = 0
+        n_total = 0
         for instance in tqdm(data['data']):
             context_sents = sentencizer(instance['story'])
             context_encoded = [tokenizer.encode(sentence) for sentence in context_sents]
             history_encoded = []
             for question in instance['questions']:
+                n_total += 1
                 question_text = question['input_text']
                 history_encoded.append(tokenizer.encode(question_text))
                 with torch.no_grad():
@@ -264,18 +267,20 @@ def run(tokenizer, model, args):
                         history_encoded = history_encoded[-(2 * args.max_history + 1):]
                         answer_text = tokenizer.decode(out_ids, skip_special_tokens=True)
                     except AssertionError as e:
-                        logger.warning(e)
+                        logger.warning('ERROR (id: %s turn_id: %s): %s' % (instance['id'], question['turn_id'], e))
                         del history_encoded[-1]
                         answer_text = 'NONE'
+                        n_errors += 1
 
                 predictions.append({
                     'id': instance['id'],
                     'turn_id': question['turn_id'],
                     'answer': answer_text
                 })
+        logger.info('%i of %i predictions failed' % (n_errors, n_total))
         out_fn = args.coqa_file.replace('.json', '') + '_predictions.json'
         logger.info('write predictions to: %s ...' % out_fn)
-        json.dump(open(out_fn, 'w'), predictions, indent=2)
+        json.dump(predictions, open(out_fn, 'w'), indent=2)
     else:
         logger.info("Sample a personality")
         personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
