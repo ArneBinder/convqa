@@ -156,16 +156,17 @@ def ask():
         params = get_params()
         history = params.get('history', [])
         question = params['question']
-        history.append(g.tokenizer.encode(question))
-        personality_encoded = [g.tokenizer.encode(sentence) for sentence in params['personality']]
-        history_encoded = [g.tokenizer.encode(utterance) for utterance in history]
-        with torch.no_grad():
-            out_ids = sample_sequence(personality_encoded, history_encoded, g.tokenizer, g.model, g.model_args)
-        history_encoded.append(out_ids)
-        history_encoded = history_encoded[-(2 * g.model_args.max_history + 1):]
-        params['prediction'] = g.tokenizer.decode(out_ids, skip_special_tokens=True)
-        params['history'] = [g.tokenizer.decode(utterance) for utterance in history_encoded]
-        logger.debug('predicted:\n%s' % params['prediction'])
+        with endpoint.app_context():
+            history.append(g.tokenizer.encode(question))
+            personality_encoded = [g.tokenizer.encode(sentence) for sentence in params['personality']]
+            history_encoded = [g.tokenizer.encode(utterance) for utterance in history]
+            with torch.no_grad():
+                out_ids = sample_sequence(personality_encoded, history_encoded, g.tokenizer, g.model, g.model_args)
+            history_encoded.append(out_ids)
+            history_encoded = history_encoded[-(2 * g.model_args.max_history + 1):]
+            params['prediction'] = g.tokenizer.decode(out_ids, skip_special_tokens=True)
+            params['history'] = [g.tokenizer.decode(utterance) for utterance in history_encoded]
+            logger.debug('predicted:\n%s' % params['prediction'])
 
         return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
         json_data = json.dumps(params)
@@ -215,22 +216,22 @@ def run():
     model.to(args.device)
     model.eval()
 
-    logger.info("Sample a personality")
-    personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
-    personality = random.choice(personalities)
-    logger.info("Selected personality: %s", tokenizer.decode(chain(*personality)))
-
     history = []
     if args.start_endpoint:
-        g.tokenizer = tokenizer
-        g.model = model
-        g.model_args = args
+        with endpoint.app_context():
+            g.tokenizer = tokenizer
+            g.model = model
+            g.model_args = args
 
         logger.info('Starting the API')
         endpoint.run(host='0.0.0.0', port=5000)
 
 
     else:
+        logger.info("Sample a personality")
+        personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
+        personality = random.choice(personalities)
+        logger.info("Selected personality: %s", tokenizer.decode(chain(*personality)))
         while True:
             raw_text = input(">>> ")
             while not raw_text:
