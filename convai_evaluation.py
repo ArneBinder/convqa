@@ -29,7 +29,7 @@ class TransformerAgent(Agent):
     def add_cmdline_args(argparser):
         agent_args = argparser.add_argument_group('Agent parameters')
         agent_args.add_argument("--model_checkpoint", type=str, default="", help="Path, url or short name of the model")
-        agent_args.add_argument("--model_type", type=str, default="openai-gpt", help="openai-gpt, or gpt2")
+        agent_args.add_argument("--model", type=str, default="openai-gpt", help="Model type (openai-gpt or gpt2)")
         agent_args.add_argument("--max_history", type=int, default=2, help="Number of previous utterances to keep in history")
         agent_args.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
         agent_args.add_argument("--eval_type", type=str, default="hits@1", help="hits@1, ppl or f1")
@@ -61,13 +61,13 @@ class TransformerAgent(Agent):
             if args.model_checkpoint == "":
                 args.model_checkpoint = download_pretrained_model()
 
-            if args.model_type.startswith('gpt2'):
+            if args.model.startswith('gpt2'):
                 self.tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint)
                 if self.args.eval_type == "hits@1":
                     self.model_checkpoint = GPT2DoubleHeadsModel.from_pretrained(args.model_checkpoint)
                 else:
                     self.model_checkpoint = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
-            elif args.model_type == 'openai-gpt':
+            elif args.model == 'openai-gpt':
                 self.tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_checkpoint)
                 if self.args.eval_type == "hits@1":
                     self.model_checkpoint = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_checkpoint)
