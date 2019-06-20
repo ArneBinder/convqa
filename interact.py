@@ -159,9 +159,9 @@ def ask():
         logger.debug(json.dumps(params, indent=2))
 
         history = params.get('history', [])
-        question = params['question']
+        user_input = params['user_input']
 
-        history.append(question)
+        history.append(user_input)
         context_encoded = [tokenizer.encode(sentence) for sentence in params['context']]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():

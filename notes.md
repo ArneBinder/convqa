@@ -27,10 +27,10 @@ Validation: {'accuracy': 0.7925906935008332,
  'average_nll': 2.652179621915499,
  'average_ppl': 14.184922743802078,
  'nll': 2.652179621915499}
-(planned)
-cmd_eval `CUDA_VISIBLE_DEVICES=0 python ./convai_evaluation.py --eval_type hits@1 --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
-cmd_eval `CUDA_VISIBLE_DEVICES=1 python ./convai_evaluation.py --eval_type ppl --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
-cmd_eval `CUDA_VISIBLE_DEVICES=2 python ./convai_evaluation.py --eval_type f1 --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
+
+(planned) cmd_eval `CUDA_VISIBLE_DEVICES=0 python ./convai_evaluation.py --eval_type hits@1 --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
+(planned) cmd_eval `CUDA_VISIBLE_DEVICES=1 python ./convai_evaluation.py --eval_type ppl --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
+(running) cmd_eval `CUDA_VISIBLE_DEVICES=2 python ./convai_evaluation.py --eval_type f1 --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
 
 ## CoQA
 gpt (slightly different to personachat setting)
@@ -54,7 +54,7 @@ Validation: {'accuracy': 0.7953745600804424,
  'average_nll': 1.2890385170319123,
  'average_ppl': 3.6292953719785754,
  'nll': 1.2890385170319123}
-
+cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --model openai-gpt --model_checkpoint runs/Jun19_14-49-28_serv-9200 --max_history 2`
 
 
 ## todo
