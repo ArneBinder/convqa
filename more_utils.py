@@ -21,6 +21,8 @@ def sample_neg_indices_old(n_instances, n_candidates):
 
 
 def sample_neg_candidates(instances, n_candidates, n_resample=3):
+    if not isinstance(instances, np.ndarray):
+        instances = np.array(instances)
 
     n_collisions = 0
     nn_collisions = 0
@@ -58,6 +60,7 @@ def count_sentences(s, sentencizer, counter=None):
     return len(sents)
 
 def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona, stats):
+    all_questions = []
     all_answers = []
 
     was_truncated = False
@@ -70,7 +73,8 @@ def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona
         instance['personality'] = instance['personality'][:max_sentences_persona]
 
     assert len(record['questions']) == len(record['answers']), 'number of questions / answers mismatch'
-    instance['utterances'] = []
+    #instance['utterances'] = []
+    instance['n_utterances'] = 0
     history = []
     for i in range(len(record['questions'])):
         utterance = {}
@@ -89,46 +93,64 @@ def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona
             was_truncated = True
             continue
 
-        history.append(question_text)
-        utterance['history'] = history.copy()
-        # utterance['candidates'] = [answer_text]
+        #history.append(question_text)
+        #utterance['history'] = history.copy()
         all_answers.append(answer_text)
-        instance['utterances'].append(utterance)
-        history.append(answer_text)
+        all_questions.append(question_text)
+        #instance['utterances'].append(utterance)
+        #history.append(answer_text)
+        instance['n_utterances'] += 1
 
-    return instance, all_answers, was_truncated
+    return instance, all_questions, all_answers, was_truncated
 
-def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences_qa=1, max_sentences_persona=None):
+def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences_qa=1, max_sentences_persona=None,
+                              create_question_utterances=False):
     instances = []
     all_answers = []
+    all_questions = []
     stats = {'persona':{'n_sents': Counter()}, 'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
     n_skipped = 0
     for record in coqa_data:
-        instance, current_answers, was_truncated = create_instance(record=record, sentencizer=sentencizer,
+        instance, current_questions, current_answers, was_truncated = create_instance(record=record, sentencizer=sentencizer,
                                                         max_sentences_qa=max_sentences_qa,
                                                         max_sentences_persona=max_sentences_persona, stats=stats)
         if was_truncated:
             n_skipped += 1
             continue
         instances.append(instance)
+        all_questions.extend(current_questions)
         all_answers.extend(current_answers)
     print('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
     print('max_sentences_persona: %s' % str(max_sentences_persona))
     print('max_sentences_qa: %s' % str(max_sentences_qa))
     print(stats)
 
-    all_answers = np.array(all_answers)
     sampled_neg_answers = sample_neg_candidates(instances=all_answers, n_candidates=n_candidates)
-    #all_sampled_answers = all_answers[sampled_neg_indices]
+    sampled_neg_questions = None
+    if create_question_utterances:
+        sampled_neg_questions = sample_neg_candidates(instances=all_questions, n_candidates=n_candidates)
+
     print('neg samples created')
     #all_candidates = np.concatenate([sampled_neg_answers.T, [all_answers]]).T
 
     i = 0
     for instance in instances:
-        for j, utterance in enumerate(instance['utterances']):
-            # prepend samples
-            instance['utterances'][j]['candidates'] = sampled_neg_answers[i].tolist() + [all_answers[i]]
+        instance['utterances'] = []
+        history = []
+        #for j, utterance in enumerate(instance['utterances']):
+        for _ in range(instance['n_utterances']):
+            if sampled_neg_questions is not None:
+                new_utterance = {'history': history.copy(),
+                                 'candidates': sampled_neg_questions[i].tolist() + [all_questions[i]]}
+                instance['utterances'].append(new_utterance)
+            history.append(all_questions[i])
+
+            new_utterance = {'history': history.copy(),
+                             'candidates': sampled_neg_answers[i].tolist() + [all_answers[i]]}
+            instance['utterances'].append(new_utterance)
+            history.append(all_answers[i])
             i += 1
+        del instance['n_utterances']
     print('candidates created')
 
     return instances
@@ -139,13 +161,17 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
                         out=None,
                         n_candidates=20,
                         max_sents_qa=1,
-                        max_sents_persona=2):
+                        max_sents_persona=None,
+                        create_question_utterances=False):
     if out is None:
         fn = 'coqa_converted_persona'
         if max_sents_qa and max_sents_qa >= 0:
             fn += '_sentsqa%i' % max_sents_qa
         if max_sents_persona and max_sents_persona >= 0:
             fn += '_sentsp%i' % max_sents_persona
+        if create_question_utterances:
+            fn += '_questionutterances'
+
         out = os.path.join(os.path.dirname(coqa_train), '%s.json' % fn)
 
     sentencizer = create_sentencizer()
@@ -153,17 +179,20 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
     coqa_dev = json.load(open(coqa_dev))['data']
     coqa_converted_dev = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
                                                    n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                   max_sentences_persona=max_sents_persona)
+                                                   max_sentences_persona=max_sents_persona,
+                                                   create_question_utterances=create_question_utterances)
     print('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
     coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
                                                      n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                     max_sentences_persona=max_sents_persona)
+                                                     max_sentences_persona=max_sents_persona,
+                                                     create_question_utterances=create_question_utterances)
     print('dump to json: %s ...' % out)
     json.dump({'train': coqa_converted_train,
                'valid': coqa_converted_dev
                },
               open(out, 'w'), indent=2)
+    return out
 
 
 def gen_personachat_extract(fn, extract_size=10, start_idx=0):
@@ -215,9 +244,9 @@ if __name__ == '__main__':
     #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
     # convert CoQA to personachat
-    #coqa_to_personachat(max_sents_persona=20)
+    out_fn = coqa_to_personachat(max_sents_persona=None, create_question_utterances=True)
     # stats: train: 7199; valid: 500
-    #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa_converted_persona_sentsqa1_sentsp20.json', extract_size=100, start_idx=0)
+    gen_personachat_extract(fn=out_fn, extract_size=10, start_idx=0)
 
     #x = dummy_tokenize()
 
