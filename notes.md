@@ -55,10 +55,35 @@ Validation: {'accuracy': 0.7953745600804424,
  'average_ppl': 3.6292953719785754,
  'nll': 1.2890385170319123}
 cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun19_14-49-28_serv-9200 --max_history 2 --start_endpoint`
+cmd_predict `CUDA_VISIBLE_DEVICES=2 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun19_14-49-28_serv-9200 --max_history 2 --coqa_file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json &> eval2.log`
+eval with official CoQA script @dev:
+"overall (in domain only; 268 of 7983 predictions failed)": {
+    "em": 36.4,
+    "f1": 43.7,
+    "turns": 7983
+  }
+delete full history if error:
+"overall (in domain only; 216 of 7983 predictions failed)": {
+   "in_domain": {
+    "em": 36.0,
+    "f1": 43.4,
+    "turns": 7983
+  },
+
+train to also predict questions
+(running) cmd `CUDA_VISIBLE_DEVICES=0,1 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05 &> train0.log`
 
 
 ## todo
+ * predict questions - train, eval
+ * use gpt2 - train
+ * train more epochs
+
+## done
  * evaluate original@personachat
- * evaluate original@coqa
- * use gpt2
- * predict questions
+ * use gpt2 - implemented workflow
+ * predict questions - adapted CoQA dataset converter to generate question utterances
+ * eval original@coqa
+
+## discarded
+ * evaluate gpt2@personachat: gpt2 does not work together with parlai.core.agents.Agent
