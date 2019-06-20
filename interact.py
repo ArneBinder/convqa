@@ -147,12 +147,14 @@ def hello_world():
     return "Hello World!"
 
 
-@endpoint.route("/ask")
+@endpoint.route("/ask", methods=['GET', 'POST'])
 def ask():
     try:
         start = time.time()
         logging.info('prediction requested')
         params = get_params()
+        logger.debug(params)
+
         history = params.get('history', [])
         question = params['question']
         with endpoint.app_context():
