@@ -171,7 +171,11 @@ def ask():
         history = params.get('history', [])
         user_input = params['user_input']
 
-        context = sentencizer(params['context'])
+        if isinstance(params['context'], str):
+            assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
+            context = sentencizer(params['context'])
+        else:
+            context = params['context']
 
         history.append(user_input)
         context_encoded = [tokenizer.encode(sentence) for sentence in context]
@@ -215,6 +219,7 @@ def init():
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
     parser.add_argument("--top_p", type=float, default=0.9, help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--start_endpoint", action='store_true', help="Start a flask endpoint")
+    parser.add_argument("--spacy_model", type=str, default="en_core_web_sm", help="to allow automatic sentence splitting for flask endpoint")
 
     args = parser.parse_args()
 
@@ -268,6 +273,10 @@ if __name__ == "__main__":
 
     tokenizer, model, args = init()
     if args.start_endpoint:
-        sentencizer = create_sentencizer()
+        try:
+            sentencizer = create_sentencizer(spacy_model=args.spacy_model)
+        except IOError as e:
+            logger.warning('could not load spacy model "%s" for context sentence splitting. Please provide a list of strings as input for context.' % args.spacy_model)
+            sentencizer = None
     run(tokenizer, model, args)
 

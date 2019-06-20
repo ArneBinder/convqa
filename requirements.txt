@@ -7,6 +7,9 @@
 #   cd pytorch-pretrained-BERT
 #   git checkout attention
 #   pip install .
+#
+# To allow sentence splitting in flask endpoint (see interact.py), install spacy model:
+#   python -m spacy download en_core_web_sm
 
 
 torch
