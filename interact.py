@@ -2,8 +2,11 @@
 # All rights reserved.
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+import ast
+import json
 import logging
 import random
+import time
 from argparse import ArgumentParser
 from itertools import chain
 from pprint import pformat
@@ -14,6 +17,10 @@ import torch.nn.functional as F
 from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2LMHeadModel, GPT2Tokenizer
 from train import SPECIAL_TOKENS, build_input_from_segments
 from utils import get_dataset_personalities, download_pretrained_model
+from flask import Flask, g, jsonify, Response, request
+
+endpoint = Flask(__name__, static_url_path='')
+#cors = CORS(endpoint)
 
 def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k, top-p (nucleus) and/or threshold filtering
@@ -84,6 +91,93 @@ def sample_sequence(personality, history, tokenizer, model, args, current_output
 
     return current_output
 
+class InvalidUsage(Exception):
+    status_code = 400
+
+    def __init__(self, message, status_code=None, payload=None):
+        Exception.__init__(self)
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv['message'] = self.message
+        return rv
+
+
+@endpoint.errorhandler(InvalidUsage)
+def handle_invalid_usage(error):
+    response = jsonify(error.to_dict())
+    response.status_code = error.status_code
+    return response
+
+
+def parse_params(params, prev={}):
+    result = prev
+    for param in params:
+        v_ = params[param]
+        try:
+            v = ast.literal_eval(v_)
+        except ValueError:
+            v = v_
+        except SyntaxError:
+            v = v_
+            logging.warning('Syntax error while parsing "%s". Assume it is a string.' % v_)
+        result[param] = v
+    return result
+
+
+def get_params():
+    data = request.data.decode("utf-8")
+    params = {}
+    if data != "":
+        params = json.loads(data)
+    params = parse_params(request.args, params)
+    params = parse_params(request.form, params)
+    if request.headers.environ['HTTP_ACCEPT'] != '*/*':
+        params['HTTP_ACCEPT'] = request.headers.environ['HTTP_ACCEPT']
+
+    return params
+
+
+@endpoint.route("/hello_world")
+def hello_world():
+    return "Hello World!"
+
+
+@endpoint.route("/ask")
+def ask():
+
+    try:
+        start = time.time()
+        logging.info('prediction requested')
+        params = get_params()
+        history = params.get('history', [])
+        question = params['question']
+        history.append(g.tokenizer.encode(question))
+        personality = params['personality']
+        with torch.no_grad():
+            out_ids = sample_sequence(personality, history, g.tokenizer, g.model, g.model_args)
+        history.append(out_ids)
+        history = history[-(2 * g.model_args.max_history + 1):]
+        out_text = g.tokenizer.decode(out_ids, skip_special_tokens=True)
+
+        params['history'] = history
+        params['result'] = out_text
+        logger.debug('predicted:\n%s' % out_text)
+
+        return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
+        json_data = json.dumps(params)
+        response = Response(json_data, mimetype=return_type)
+
+        logger.info("Time spent handling the request: %f" % (time.time() - start))
+    except Exception as e:
+        raise InvalidUsage('%s: %s' % (type(e).__name__, e.message))
+    return response
+
+
 def run():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
@@ -100,10 +194,10 @@ def run():
     parser.add_argument("--temperature", type=int, default=0.7, help="Sampling softmax temperature")
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
     parser.add_argument("--top_p", type=float, default=0.9, help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
+    parser.add_argument("--start_endpoint", type=bool, default=False, help="Start a flask endpoint")
+
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__file__)
     logger.info(pformat(args))
 
     if args.model_checkpoint == "":
@@ -128,19 +222,32 @@ def run():
     logger.info("Selected personality: %s", tokenizer.decode(chain(*personality)))
 
     history = []
-    while True:
-        raw_text = input(">>> ")
-        while not raw_text:
-            print('Prompt should not be empty!')
+    if args.start_endpoint:
+        g.tokenizer = tokenizer
+        g.model = model
+        g.model_args = args
+
+        logger.info('Starting the API')
+        endpoint.run(host='0.0.0.0', port=5000)
+
+
+    else:
+        while True:
             raw_text = input(">>> ")
-        history.append(tokenizer.encode(raw_text))
-        with torch.no_grad():
-            out_ids = sample_sequence(personality, history, tokenizer, model, args)
-        history.append(out_ids)
-        history = history[-(2*args.max_history+1):]
-        out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
-        print(out_text)
+            while not raw_text:
+                print('Prompt should not be empty!')
+                raw_text = input(">>> ")
+            history.append(tokenizer.encode(raw_text))
+            with torch.no_grad():
+                out_ids = sample_sequence(personality, history, tokenizer, model, args)
+            history.append(out_ids)
+            history = history[-(2*args.max_history+1):]
+            out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
+            print(out_text)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__file__)
+
     run()
