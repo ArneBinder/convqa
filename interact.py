@@ -5,8 +5,11 @@
 import ast
 import json
 import logging
+import os
 import random
+import sys
 import time
+import traceback
 from argparse import ArgumentParser
 from itertools import chain
 from pprint import pformat
@@ -153,21 +156,21 @@ def ask():
         start = time.time()
         logging.info('prediction requested')
         params = get_params()
-        logger.debug(params)
+        logger.debug(json.dumps(params, indent=2))
 
         history = params.get('history', [])
         question = params['question']
-        with endpoint.app_context():
-            history.append(tokenizer.encode(question))
-            personality_encoded = [tokenizer.encode(sentence) for sentence in params['personality']]
-            history_encoded = [tokenizer.encode(utterance) for utterance in history]
-            with torch.no_grad():
-                out_ids = sample_sequence(personality_encoded, history_encoded, tokenizer, model, args)
-            history_encoded.append(out_ids)
-            history_encoded = history_encoded[-(2 * args.max_history + 1):]
-            params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
-            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
-            logger.debug('predicted:\n%s' % params['prediction'])
+
+        history.append(question)
+        context_encoded = [tokenizer.encode(sentence) for sentence in params['context']]
+        history_encoded = [tokenizer.encode(utterance) for utterance in history]
+        with torch.no_grad():
+            out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
+        history_encoded.append(out_ids)
+        history_encoded = history_encoded[-(2 * args.max_history + 1):]
+        params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
+        params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+        logger.debug('predicted:\n%s' % params['prediction'])
 
         return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
         json_data = json.dumps(params)
@@ -175,7 +178,11 @@ def ask():
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:
-        raise InvalidUsage('%s: %s' % (type(e).__name__, str(e)))
+        tb = traceback.format_exc()
+        logger.error(tb)
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        raise InvalidUsage('%s: %s @line %s in %s' % (type(e).__name__, str(e), exc_tb.tb_lineno, fname))
     return response
 
 
@@ -195,7 +202,7 @@ def init():
     parser.add_argument("--temperature", type=int, default=0.7, help="Sampling softmax temperature")
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
     parser.add_argument("--top_p", type=float, default=0.9, help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
-    parser.add_argument("--start_endpoint", type=bool, default=False, help="Start a flask endpoint")
+    parser.add_argument("--start_endpoint", action='store_true', help="Start a flask endpoint")
 
     args = parser.parse_args()
 
