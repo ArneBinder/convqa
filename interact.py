@@ -175,7 +175,7 @@ def ask():
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:
-        raise InvalidUsage('%s: %s' % (type(e).__name__, e.message))
+        raise InvalidUsage('%s: %s' % (type(e).__name__, str(e)))
     return response
 
 
