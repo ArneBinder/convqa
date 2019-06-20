@@ -14,6 +14,7 @@ from argparse import ArgumentParser
 from collections import Counter
 from itertools import chain
 from pprint import pformat
+from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
@@ -220,6 +221,7 @@ def init():
     parser.add_argument("--top_p", type=float, default=0.9, help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--start_endpoint", action='store_true', help="Start a flask endpoint")
     parser.add_argument("--spacy_model", type=str, default="en_core_web_sm", help="to allow automatic sentence splitting for flask endpoint")
+    parser.add_argument("--coqa_file", type=str, default="", help="path to a file in the CoQA dataset format containing question where the answers will be predicted")
 
     args = parser.parse_args()
 
@@ -248,21 +250,47 @@ def run(tokenizer, model, args):
     if args.start_endpoint:
         logger.info('Starting the API')
         endpoint.run(host='0.0.0.0', port=5000)
+    elif args.coqa_file:
+        logger.info('predict answers for CoQA file: %s ...' % args.coqa_file)
+        data = json.load(open(args.coqa_file))
+        assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). This is required to process a CoQA dataset file.'
+        predictions = []
+        for instance in tqdm(data['data']):
+            context_sents = sentencizer(instance['story'])
+            context_encoded = [tokenizer.encode(sentence) for sentence in context_sents]
+            history_encoded = []
+            for question in instance['questions']:
+                question_text = question['input_text']
+                history_encoded.append(tokenizer.encode(question_text))
+                with torch.no_grad():
+                    out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
+                history_encoded.append(out_ids)
+                history_encoded = history_encoded[-(2 * args.max_history + 1):]
+                answer_text = tokenizer.decode(out_ids, skip_special_tokens=True)
+                predictions.append({
+                    'id': instance['id'],
+                    'turn_id': question['turn_id'],
+                    'answer': answer_text
+                })
+        out_fn = args.coqa_file.replace('.json', '') + '_predictions.json'
+        logger.info('write predictions to: %s ...' % out_fn)
+        json.dump(open(out_fn, 'w'), predictions, indent=2)
     else:
         logger.info("Sample a personality")
         personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
         personality = random.choice(personalities)
+        history_encoded = []
         logger.info("Selected personality: %s", tokenizer.decode(chain(*personality)))
         while True:
             raw_text = input(">>> ")
             while not raw_text:
                 print('Prompt should not be empty!')
                 raw_text = input(">>> ")
-            history.append(tokenizer.encode(raw_text))
+            history_encoded.append(tokenizer.encode(raw_text))
             with torch.no_grad():
-                out_ids = sample_sequence(personality, history, tokenizer, model, args)
-            history.append(out_ids)
-            history = history[-(2*args.max_history+1):]
+                out_ids = sample_sequence(personality, history_encoded, tokenizer, model, args)
+            history_encoded.append(out_ids)
+            history_encoded = history_encoded[-(2*args.max_history+1):]
             out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
             print(out_text)
 
@@ -272,8 +300,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__file__)
 
     tokenizer, model, args = init()
-    if args.start_endpoint:
+    if args.start_endpoint or args.coqa_file:
         try:
+            logger.info('create sentencizer with spacy ...')
             sentencizer = create_sentencizer(spacy_model=args.spacy_model)
         except IOError as e:
             logger.warning('could not load spacy model "%s" for context sentence splitting. Please provide a list of strings as input for context.' % args.spacy_model)
