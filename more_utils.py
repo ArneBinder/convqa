@@ -3,7 +3,9 @@ import os
 from collections import Counter
 
 import numpy as np
+import requests
 import spacy
+from spacy.kb import KnowledgeBase
 
 # too large for memory
 def sample_neg_indices_old(n_instances, n_candidates):
@@ -221,6 +223,61 @@ def create_sentencizer(spacy_model='en_core_web_sm'):
             sents.extend([_sent.strip() for _sent in sent.text.split('\n\n') if _sent.strip() != ''])
         return sents
     return sentencizer
+
+def create_context_fetcher_spacy(spacy_model='en_core_web_sm'):
+    #nlp = spacy.load(spacy_model)
+
+    def fetch_context(s):
+        raise NotImplementedError('fetch_context is not yet implemented')
+        #s_parsed = nlp(s)
+        return 'DUMMY CONTEXT'
+    return None
+
+def create_context_fetcher():
+    url_disambiguate = "http://cloud.science-miner.com/nerd/service/disambiguate"
+    url_fetch = "http://cloud.science-miner.com/nerd/service/kb/concept"
+    headers = {
+        'Cache-Control': 'no-cache',
+    }
+
+    dummy_query = {
+        #"text": "Who is the pope?",
+        "shortText": "",
+        "termVector": [],
+        "language": {
+            "lang": "en"
+        },
+        "entities": [],
+        "mentions": [
+            "ner",
+            "wikipedia"
+        ],
+        "nbest": False,
+        "sentence": False,
+        "customisation": "generic"
+    }
+
+    def context_fetcher(s):
+        print('fetch context for "%s"...' % s)
+        res = []
+        query = {'text': s}
+        files = {'query': (None, json.dumps(query))}
+        response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
+        response_data = json.loads(response.text)
+        assert len(response_data['entities']) > 0, 'no entities found'
+        for entity in response_data['entities']:
+            print('fetch entity data for "%s"...' % entity['rawName'])
+            wiki_id = entity['wikipediaExternalRef']
+            response_entity = requests.get('%s/%s?lang=en' % (url_fetch, wiki_id), timeout=120)
+            response_entity_data = json.loads(response_entity.text)
+            #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
+            for definition in response_entity_data['definitions']:
+                if definition.get('lang', '') == 'en':
+                    res.append(definition['definition'])
+
+        assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data['entities']])
+        return ' '.join(res)
+    return context_fetcher
 
 
 def dummy_tokenize():

@@ -109,7 +109,7 @@ runs/Jun20_20-31-41_serv-9200/predictions.json
     "f1": 57.5,
     "turns": 7983
   }
-
+cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --model gpt2 --model_checkpoint runs/Jun20_20-31-41_serv-9200 --max_history 2 --start_endpoint`
 
 
 ### train with gpt --n_epochs 3
@@ -135,8 +135,12 @@ cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model openai-gpt --mo
 (FREEZES or VERY SLOW)
 
 
-## planned
+## ideas
+ * improve context fetching:
+    * set up own server
+    * add context for unknown entities (even if some history is available)
 
+## planned
 
 ## progress
  * predict questions - eval
@@ -151,6 +155,9 @@ cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model openai-gpt --mo
  * predict questions - train
  * train more epochs - train
  * use gpt2 - train (max_sequence_length=512)
+ * implement context fetching:
+    1. entity linking on user_data (e.g. see https://nerd.readthedocs.io/en/latest/overview.html)
+    2. fetch wikipedia content (e.g. abstract)
 
 ## discarded
  * evaluate gpt2@personachat: gpt2 does not work together with parlai.core.agents.Agent

@@ -21,7 +21,7 @@ import torch.nn.functional as F
 
 from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2LMHeadModel, GPT2Tokenizer
 
-from more_utils import create_sentencizer
+from more_utils import create_sentencizer, create_context_fetcher
 from train import SPECIAL_TOKENS, build_input_from_segments
 from utils import get_dataset_personalities, download_pretrained_model
 from flask import Flask, g, jsonify, Response, request
@@ -172,14 +172,16 @@ def ask():
         history = params.get('history', [])
         user_input = params['user_input']
 
+        if 'context' not in params:
+            assert context_fetcher is not None, 'No context fetcher initialized (requires a spacy model). Please provide a context with every request.'
+            params['context'] = context_fetcher(user_input)
+
         if isinstance(params['context'], str):
             assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
-            context = sentencizer(params['context'])
-        else:
-            context = params['context']
+            params['context'] = sentencizer(params['context'])
 
         history.append(user_input)
-        context_encoded = [tokenizer.encode(sentence) for sentence in context]
+        context_encoded = [tokenizer.encode(sentence) for sentence in params['context']]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
             out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
@@ -322,5 +324,13 @@ if __name__ == "__main__":
         except IOError as e:
             logger.warning('could not load spacy model "%s" for context sentence splitting. Please provide a list of strings as input for context.' % args.spacy_model)
             sentencizer = None
+    if args.start_endpoint:
+        try:
+            logger.info('create context fetcher with spacy ...')
+            context_fetcher = create_context_fetcher()
+        except IOError as e:
+            logger.warning('could not create a context fetcher. Please provide a context with every request.' % args.spacy_model)
+            context_fetcher = None
+
     run(tokenizer, model, args)
 
