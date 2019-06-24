@@ -33,7 +33,9 @@ Validation: {'accuracy': 0.7925906935008332,
 (running) cmd_eval `CUDA_VISIBLE_DEVICES=2 python ./convai_evaluation.py --eval_type f1 --model_checkpoint runs/Jun19_15-08-14_serv-9200 --max_history 5`
 
 ## CoQA
-gpt (slightly different to personachat setting)
+
+### gpt
+(slightly different to personachat setting)
 
 extract100
 cmd `CUDA_VISIBLE_DEVICES=4,5 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05`
@@ -45,6 +47,7 @@ Validation:
  'average_ppl': 14.53959954396604,
  'nll': 2.6768759300456293}
 
+full dataset
 cmd `CUDA_VISIBLE_DEVICES=2,4 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05 --device cuda &> train0.log`
 run Jun19_14-49-28_serv-9200
 Epoch: [54091/54091] 100%|██████████, loss=7.72e-01 [8:45:25<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 01:15:00
@@ -70,15 +73,49 @@ delete full history if error:
     "turns": 7983
   },
 
-train to also predict questions
-(running@0,1) cmd `CUDA_VISIBLE_DEVICES=0,1 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05 &> train0.log`
+### train to also predict questions
+cmd `CUDA_VISIBLE_DEVICES=0,1 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05 &> train0.log`
+Jun20_17-25-19_serv-9200
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 15:05:22
+Validation: {'accuracy': 0.761622485680032,
+ 'average_accuracy': 0.761622485680032,
+ 'average_nll': 1.7098760648829183,
+ 'average_ppl': 5.5282762875963645,
+ 'nll': 1.7098760648829183}
 
-train with gpt2
+
+### train with gpt2
 (running@2,3) cmd `CUDA_VISIBLE_DEVICES=2,3 python ./train.py --model_checkpoint gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --device cuda --fp16 O1 &> train2.log`
 NOTE: causes out of memory on gpu, so we set MANUALLY max_sequence_length=512 (instead of 1024 as provided by pretrained model)
+Jun20_20-31-41_serv-9200
+Validation: {'accuracy': 0.8516842634489693,
+ 'average_accuracy': 0.8516842634489693,
+ 'average_nll': 1.1439010415791628,
+ 'average_ppl': 3.1389898413314663,
+ 'nll': 1.1439010415791628}
 
-train with gpt --n_epochs 3
+
+
+### train with gpt --n_epochs 3
 (running@4,5) cmd `CUDA_VISIBLE_DEVICES=4,5 python ./train.py --model_checkpoint openai-gpt --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 3 --num_candidates 4 --personality_permutations 1 --train_batch_size 2 --valid_batch_size 1 --lr 6.25e-05 --device cuda &> train4.log`
+Jun20_18-04-28_serv-9200
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 23:36:38
+Validation: {'accuracy': 0.7912267471091,
+ 'average_accuracy': 0.7912267471091,
+ 'average_nll': 1.5508835494834106,
+ 'average_ppl': 4.715634839205842,
+ 'nll': 1.5508835494834106}
+Validation: {'accuracy': 0.8098290598290598,
+ 'average_accuracy': 0.8098290598290598,
+ 'average_nll': 1.343110733074845,
+ 'average_ppl': 3.8309420272807535,
+ 'nll': 1.343110733074845}
+Validation: {'accuracy': 0.8178733031674208,
+ 'average_accuracy': 0.8178733031674208,
+ 'average_nll': 1.2127499659204495,
+ 'average_ppl': 3.362719312739074,
+ 'nll': 1.2127499659204495}
+
 
 ## planned
  * predict questions - eval
