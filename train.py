@@ -151,6 +151,9 @@ def train():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--fp16", type=str, default="", help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1, help="Local rank for distributed training (-1: not distributed)")
+    parser.add_argument("--max_sequence_length", type=int, default=-1, help="If set, use this to manually restrict the sequence length. "
+                                                                            "This might be helpful to save resources (memory). "
+                                                                            "If not set, this is looked up from the model config (n_ctx value).")
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
@@ -191,7 +194,13 @@ def train():
         model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
 
     logger.info("Prepare datasets")
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, max_sequence_length=model_config.n_ctx) #, return_strings=True)
+    max_sequence_length = model_config.n_ctx if args.max_sequence_length <= 0 else args.max_sequence_length
+    assert max_sequence_length <= model_config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
+                                                      'supported by the model (config.n_ctx [%i]). Please use a lower ' \
+                                                      'value or do not set it [-1] to use the highest supported one.' \
+                                                      % (max_sequence_length, model_config.n_ctx)
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, # return_strings=True,
+                                                                              max_sequence_length=max_sequence_length)
 
     # Training function and trainer
     def update(engine, batch):

@@ -84,8 +84,8 @@ Validation: {'accuracy': 0.761622485680032,
  'nll': 1.7098760648829183}
 
 
-### train with gpt2
-(running@2,3) cmd `CUDA_VISIBLE_DEVICES=2,3 python ./train.py --model_checkpoint gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --device cuda --fp16 O1 &> train2.log`
+### train with gpt2 --max_sequence_length 512
+(running@2,3) cmd `CUDA_VISIBLE_DEVICES=2,3 python ./train.py --model_checkpoint gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
 NOTE: causes out of memory on gpu, so we set MANUALLY max_sequence_length=512 (instead of 1024 as provided by pretrained model)
 Jun20_20-31-41_serv-9200
 Validation: {'accuracy': 0.8516842634489693,
