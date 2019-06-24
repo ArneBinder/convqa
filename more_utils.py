@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import Counter
 
 import numpy as np
@@ -273,7 +274,11 @@ def create_context_fetcher():
             #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
             for definition in response_entity_data['definitions']:
                 if definition.get('lang', '') == 'en':
-                    res.append(definition['definition'])
+                    definition_cleaned = definition['definition']
+                    # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
+                    definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
+                    definition_cleaned = definition_cleaned.replace("'''", '"')
+                    res.append(definition_cleaned)
 
         assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data['entities']])
         return ' '.join(res)
