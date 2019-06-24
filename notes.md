@@ -82,6 +82,14 @@ Validation: {'accuracy': 0.761622485680032,
  'average_nll': 1.7098760648829183,
  'average_ppl': 5.5282762875963645,
  'nll': 1.7098760648829183}
+cmd_predict `CUDA_VISIBLE_DEVICES=0 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun20_17-25-19_serv-9200 --max_history 2 --coqa_file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json --prediction_out runs/Jun20_17-25-19_serv-9200/predictions.json &> eval0.log`
+runs/Jun20_17-25-19_serv-9200/predictions.json
+cmd_eval `python evaluate-v1.0.py --data-file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json --pred-file runs/Jun20_17-25-19_serv-9200/predictions.json > runs/Jun20_17-25-19_serv-9200/eval_coqa_dev.txt`
+"overall": {
+    "em": 3.6,
+    "f1": 6.7,
+    "turns": 7983
+  }
 
 
 ### train with gpt2 --max_sequence_length 512
@@ -93,6 +101,14 @@ Validation: {'accuracy': 0.8516842634489693,
  'average_nll': 1.1439010415791628,
  'average_ppl': 3.1389898413314663,
  'nll': 1.1439010415791628}
+cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model gpt2 --model_checkpoint runs/Jun20_20-31-41_serv-9200 --max_history 2 --coqa_file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json --prediction_out runs/Jun20_20-31-41_serv-9200/predictions.json &> eval1.log`
+NOTE: NO LENGTH RESTRICTION for PREDICTION!
+runs/Jun20_20-31-41_serv-9200/predictions.json
+"overall": {
+    "em": 49.0,
+    "f1": 57.5,
+    "turns": 7983
+  }
 
 
 
@@ -115,22 +131,26 @@ Validation: {'accuracy': 0.8178733031674208,
  'average_nll': 1.2127499659204495,
  'average_ppl': 3.362719312739074,
  'nll': 1.2127499659204495}
+cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun20_18-04-28_serv-9200 --max_history 2 --coqa_file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json --prediction_out runs/Jun20_18-04-28_serv-9200/predictions.json &> eval1.log`
+(FREEZES or VERY SLOW)
 
 
 ## planned
- * predict questions - eval
- * use gpt2 - eval
+
 
 ## progress
- * predict questions - train
- * train more epochs
- * use gpt2 - train (max_sequence_length=512)
+ * predict questions - eval
+ * use gpt2 - eval
+ * train more epochs - eval
 
 ## done
  * evaluate original@personachat
  * use gpt2 - implemented workflow
  * predict questions - adapted CoQA dataset converter to generate question utterances
  * eval original@coqa
+ * predict questions - train
+ * train more epochs - train
+ * use gpt2 - train (max_sequence_length=512)
 
 ## discarded
  * evaluate gpt2@personachat: gpt2 does not work together with parlai.core.agents.Agent
