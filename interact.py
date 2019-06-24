@@ -69,12 +69,17 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
 
 
 def sample_sequence(personality, history, tokenizer, model, args, current_output=None):
+    max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
+    assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
+                                                      'supported by the model (config.n_ctx [%i]). Please use a lower ' \
+                                                      'value or do not set it [-1] to use the highest supported one.' \
+                                                      % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, with_eos=False,
-                                                       max_sequence_length=model.config.n_ctx)
+                                                       max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
 
@@ -206,6 +211,9 @@ def init():
     parser.add_argument("--model_checkpoint", type=str, default="", help="Path, url or short name of the model")
     parser.add_argument("--max_history", type=int, default=2, help="Number of previous utterances to keep in history")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
+    parser.add_argument("--max_sequence_length", type=int, default=-1, help="If set, use this to manually restrict the sequence length. "
+                                                                            "This might be helpful to save resources (memory). "
+                                                                            "If not set, this is looked up from the model config (n_ctx value).")
 
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
