@@ -217,6 +217,7 @@ def init():
     parser.add_argument("--start_endpoint", action='store_true', help="Start a flask endpoint")
     parser.add_argument("--spacy_model", type=str, default="en_core_web_sm", help="to allow automatic sentence splitting for flask endpoint")
     parser.add_argument("--coqa_file", type=str, default="", help="path to a file in the CoQA dataset format containing question where the answers will be predicted")
+    parser.add_argument("--prediction_out", type=str, default="", help="path to a file to save the predictions")
 
     args = parser.parse_args()
 
@@ -278,7 +279,7 @@ def run(tokenizer, model, args):
                     'answer': answer_text
                 })
         logger.info('%i of %i predictions failed' % (n_errors, n_total))
-        out_fn = args.coqa_file.replace('.json', '') + '_predictions.json'
+        out_fn = args.prediction_out or args.coqa_file.replace('.json', '') + '_predictions.json'
         logger.info('write predictions to: %s ...' % out_fn)
         json.dump(predictions, open(out_fn, 'w'), indent=2)
     else:
