@@ -287,7 +287,7 @@ def run(tokenizer, model, args):
                     'answer': answer_text
                 })
         logger.info('%i of %i predictions failed' % (n_errors, n_total))
-        out_fn = args.prediction_out or args.coqa_file.replace('.json', '') + '_predictions.json'
+        out_fn = args.prediction_out or os.path.join(args.model_checkpoint, 'predictions.json')
         logger.info('write predictions to: %s ...' % out_fn)
         json.dump(predictions, open(out_fn, 'w'), indent=2)
     else:
