@@ -75,6 +75,7 @@ def sample_sequence(personality, history, tokenizer, model, args, current_output
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
+    logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)' % (len(list(chain(*(personality + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):

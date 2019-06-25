@@ -285,7 +285,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                         # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
                         definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
                         definition_cleaned = definition_cleaned.replace("'''", '"')
-                        res_current_entity.append(definition_cleaned)
+                        res_current_entity.append(definition_cleaned.strip())
                 if len(res_current_entity) > 0:
                     res[wikipedia_entity_uri] = ' '.join(res_current_entity)
 
