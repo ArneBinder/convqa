@@ -228,6 +228,8 @@ def init():
     parser.add_argument("--spacy_model", type=str, default="en_core_web_sm", help="to allow automatic sentence splitting for flask endpoint")
     parser.add_argument("--coqa_file", type=str, default="", help="path to a file in the CoQA dataset format containing question where the answers will be predicted")
     parser.add_argument("--prediction_out", type=str, default="", help="path to a file to save the predictions")
+    parser.add_argument("--wikipedia_dump", type=str, default="", help="path to a pickle file containing a dict: "
+                                                                       "wikipedia cuid -> {'text': ['This is a sentence.', 'This is another sentence.']}")
 
     args = parser.parse_args()
 
@@ -326,8 +328,8 @@ if __name__ == "__main__":
             sentencizer = None
     if args.start_endpoint:
         try:
-            logger.info('create context fetcher with spacy ...')
-            context_fetcher = create_context_fetcher()
+            logger.info('create wikipedia context fetcher ...')
+            context_fetcher = create_context_fetcher(wikipedia_file=args.wikipedia_dump)
         except IOError as e:
             logger.warning('could not create a context fetcher. Please provide a context with every request.' % args.spacy_model)
             context_fetcher = None

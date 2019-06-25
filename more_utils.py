@@ -1,12 +1,18 @@
+import bz2
 import json
+import logging
 import os
+import pickle
 import re
+import tarfile
 from collections import Counter
 
 import numpy as np
 import requests
 import spacy
-from spacy.kb import KnowledgeBase
+from tqdm import tqdm
+
+logger = logging.getLogger(__file__)
 
 # too large for memory
 def sample_neg_indices_old(n_instances, n_candidates):
@@ -47,7 +53,7 @@ def sample_neg_candidates(instances, n_candidates, n_resample=3):
             nn_collisions += 1
             n_collisions += len(collision_indices)
 
-    print('collisions: %i (in %i instances; total: %i)' % (n_collisions, nn_collisions, len(instances)))
+    logger.info('collisions: %i (in %i instances; total: %i)' % (n_collisions, nn_collisions, len(instances)))
     return a
 
 def count_sentences(s, sentencizer, counter=None):
@@ -56,7 +62,7 @@ def count_sentences(s, sentencizer, counter=None):
         sents = sentencizer(s)
     except Exception as e:
         if ' ' in s:
-            print('WARNING: could not sentencize "%s", return as ONE sentence (%s)' % (s.strip(), e))
+            logger.warning('could not sentencize "%s", return as ONE sentence (%s)' % (s.strip(), e))
         sents = [s]
     if counter is not None:
         counter[len(sents)] +=1
@@ -123,17 +129,17 @@ def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sente
         instances.append(instance)
         all_questions.extend(current_questions)
         all_answers.extend(current_answers)
-    print('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
-    print('max_sentences_persona: %s' % str(max_sentences_persona))
-    print('max_sentences_qa: %s' % str(max_sentences_qa))
-    print(stats)
+    logger.info('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
+    logger.info('max_sentences_persona: %s' % str(max_sentences_persona))
+    logger.info('max_sentences_qa: %s' % str(max_sentences_qa))
+    logger.info(stats)
 
     sampled_neg_answers = sample_neg_candidates(instances=all_answers, n_candidates=n_candidates)
     sampled_neg_questions = None
     if create_question_utterances:
         sampled_neg_questions = sample_neg_candidates(instances=all_questions, n_candidates=n_candidates)
 
-    print('neg samples created')
+    logger.info('neg samples created')
     #all_candidates = np.concatenate([sampled_neg_answers.T, [all_answers]]).T
 
     i = 0
@@ -154,7 +160,7 @@ def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sente
             history.append(all_answers[i])
             i += 1
         del instance['n_utterances']
-    print('candidates created')
+    logger.info('candidates created')
 
     return instances
 
@@ -184,13 +190,13 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
                                                    n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
                                                    max_sentences_persona=max_sents_persona,
                                                    create_question_utterances=create_question_utterances)
-    print('convert train...')
+    logger.info('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
     coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
                                                      n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
                                                      max_sentences_persona=max_sents_persona,
                                                      create_question_utterances=create_question_utterances)
-    print('dump to json: %s ...' % out)
+    logger.info('dump to json: %s ...' % out)
     json.dump({'train': coqa_converted_train,
                'valid': coqa_converted_dev
                },
@@ -207,8 +213,8 @@ def gen_personachat_extract(fn, extract_size=10, start_idx=0):
 
     # print dataset size
     for k in data:
-        print('%s: %i' % (k, len(data[k])))
-    print('write to: %s' % fn_out)
+        logger.info('%s: %i' % (k, len(data[k])))
+    logger.info('write to: %s' % fn_out)
     if extract_size is not None:
         data = {k: data[k][start_idx:extract_size+start_idx] for k in data}
     json.dump(data, open(fn_out, 'w'), indent=2)
@@ -234,8 +240,17 @@ def create_context_fetcher_spacy(spacy_model='en_core_web_sm'):
         return 'DUMMY CONTEXT'
     return None
 
-def create_context_fetcher():
+def create_context_fetcher(wikipedia_file=None):
     url_disambiguate = "http://cloud.science-miner.com/nerd/service/disambiguate"
+    wikipedia_data = None
+    if wikipedia_file:
+        logger.info('load wikipedia data from: %s...' % wikipedia_file)
+        try:
+            # expects a pickel file containing a dict: wikipedia cuid -> {'text': [['This is a sentence.'], ['This is another sentence.']]}
+            wikipedia_data = pickle.load(open(wikipedia_file, "rb"))
+            logger.info('loaded %i articles' % len(wikipedia_data))
+        except:
+            logger.error('could not load wikipedia dump: %s' % wikipedia_file)
     url_fetch = "http://cloud.science-miner.com/nerd/service/kb/concept"
     headers = {
         'Cache-Control': 'no-cache',
@@ -259,7 +274,7 @@ def create_context_fetcher():
     }
 
     def context_fetcher(s):
-        print('fetch context for "%s"...' % s)
+        logger.info('fetch context for "%s"...' % s)
         res = []
         query = {'text': s}
         files = {'query': (None, json.dumps(query))}
@@ -267,22 +282,44 @@ def create_context_fetcher():
         response_data = json.loads(response.text)
         assert len(response_data['entities']) > 0, 'no entities found'
         for entity in response_data['entities']:
-            print('fetch entity data for "%s"...' % entity['rawName'])
-            wiki_id = entity['wikipediaExternalRef']
-            response_entity = requests.get('%s/%s?lang=en' % (url_fetch, wiki_id), timeout=120)
-            response_entity_data = json.loads(response_entity.text)
-            #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
-            for definition in response_entity_data['definitions']:
-                if definition.get('lang', '') == 'en':
-                    definition_cleaned = definition['definition']
-                    # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
-                    definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
-                    definition_cleaned = definition_cleaned.replace("'''", '"')
-                    res.append(definition_cleaned)
+            logger.info('fetch entity data for "%s"...' % entity['rawName'])
+            wikipedia_id = entity['wikipediaExternalRef']
+            if wikipedia_data is not None:
+                # NOTE: keys in wikipedia_data may be strings!
+                wikipedia_entry = wikipedia_data.get(wikipedia_id, wikipedia_data.get(str(wikipedia_id), None))
+                if wikipedia_entry is not None:
+                    logger.info('found entry for cuid=%i in wikipedia dump' % wikipedia_id)
+                    res.extend(wikipedia_entry['text'])
+                else:
+                    logger.warning('cuid=%i not found in wikipedia dump. Fetch data from %s...' % (wikipedia_id, url_fetch))
+                    response_entity = requests.get('%s/%s?lang=en' % (url_fetch, wikipedia_id), timeout=120)
+                    response_entity_data = json.loads(response_entity.text)
+                    #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
+                    for definition in response_entity_data['definitions']:
+                        if definition.get('lang', '') == 'en':
+                            definition_cleaned = definition['definition']
+                            # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
+                            definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
+                            definition_cleaned = definition_cleaned.replace("'''", '"')
+                            res.append(definition_cleaned)
 
         assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data['entities']])
         return ' '.join(res)
     return context_fetcher
+
+
+def convert_hotpotqa_wikidump_to_dict(fn, fields=('text', 'title')):
+    entries = {}
+    with tarfile.open(fn, "r:bz2") as tar:
+        for tarinfo in tqdm(tar):
+            f = tar.extractfile(tarinfo)
+            if f is not None:
+                uncomp = bz2.decompress(f.read())
+                for l in uncomp.split(b'\n'):
+                    if l.strip() != b'':
+                        entry = json.loads(l)
+                        entries[int(entry['id'])] =  {f: entry[f] for f in fields}
+    return entries
 
 
 def dummy_tokenize():
@@ -312,4 +349,4 @@ if __name__ == '__main__':
 
     #x = dummy_tokenize()
 
-    print('done')
+    logger.info('done')
