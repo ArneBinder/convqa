@@ -265,8 +265,8 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                                % (entity['rawName'], entity['nerd_selection_score'], entity['nerd_score']))
                 continue
             wikipedia_entity_uri = wikipedia_base_uri + str(entity['wikipediaExternalRef'])
-            logger.debug('found "%s" with selection confidence of %s and disambiguation confidence of %s'
-                         % (wikipedia_entity_uri, entity['nerd_selection_score'], entity['nerd_score']))
+            logger.debug('found "%s" (%s) with selection confidence of %s and disambiguation confidence of %s'
+                         % (entity['rawName'], wikipedia_entity_uri, entity['nerd_selection_score'], entity['nerd_score']))
             # fetch only not already available context
             if wikipedia_entity_uri not in res:
                 logger.info('fetch entity data for "%s"...' % entity['rawName'])
@@ -281,6 +281,10 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                     else:
                         logger.warning('cuid=%i not found in wikipedia dump. Fetch data from %s...' % (wikipedia_id, url_fetch))
                 response_entity = requests.get('%s/%s?lang=en' % (url_fetch, wikipedia_id), timeout=120)
+                if response_entity.status_code != requests.codes.ok:
+                    logger.warning('Failed to fetch data for "%s" (url: %s, http status code: %s). Skip it.'
+                                   % (wikipedia_entity_uri, response_entity.request.url, response_entity.status_code))
+                    continue
                 response_entity_data = json.loads(response_entity.text)
                 #res[wikipedia_entity_uri] = []
                 res_current_entity = []
