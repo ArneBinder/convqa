@@ -134,11 +134,17 @@ Validation: {'accuracy': 0.8178733031674208,
 cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model openai-gpt --model_checkpoint runs/Jun20_18-04-28_serv-9200 --max_history 2 --coqa_file /home/abinder/datasets/CoQA/coqa-dev-v1.0.json --prediction_out runs/Jun20_18-04-28_serv-9200/predictions.json &> eval1.log`
 (FREEZES or VERY SLOW)
 
+### train gpt2 --max_sequence_length 512 --n_epochs 3
+(running) cmd_train `CUDA_VISIBLE_DEVICES=5,6 python ./train.py --model_checkpoint gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 3 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train5.log`
+checkpoints runs/Jun25_17-09-50_serv-9200
+
+### train gpt2-medium --max_sequence_length 512
+cmd_train `CUDA_VISIBLE_DEVICES=1 python ./train.py --model_checkpoint gpt2-medium --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train1.log`
+(OUT OF MEMORY)
 
 ## ideas
  * improve context fetching:
-    * set up own server
-    * add context for unknown entities (even if some history is available)
+    * set up own (entity-fishing) server
 
 ## planned
 
@@ -158,6 +164,7 @@ cmd_predict `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model openai-gpt --mo
  * implement context fetching:
     1. entity linking on user_data (e.g. see https://nerd.readthedocs.io/en/latest/overview.html)
     2. fetch wikipedia content (e.g. abstract)
+    * add context for unknown entities (even if some history is available)
 
 ## discarded
  * evaluate gpt2@personachat: gpt2 does not work together with parlai.core.agents.Agent
