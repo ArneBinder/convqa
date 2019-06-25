@@ -254,7 +254,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
     def context_fetcher(s, previous_context=None):
         logger.info('fetch context for "%s"...' % s)
         res = previous_context or {}
-        query = {'text': s}
+        query = {'text': s, "language": {"lang": "en"}}
         files = {'query': (None, json.dumps(query))}
         response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
         response_data = json.loads(response.text)
