@@ -173,6 +173,10 @@ def ask():
         history = params.get('history', [])
         user_input = params['user_input']
 
+        # create required format of context: dict with entry_id -> list of sentences (strings)
+        if isinstance(params.get('context', None), str):
+            params['context'] = {'user': params['context']}
+
         context = params.get('context', None)
         if context is None:
             assert context_fetcher is not None, 'No context fetcher initialized (requires a spacy model). Please provide a context with every request.'
@@ -180,10 +184,7 @@ def ask():
         elif context_fetcher is not None and not params.get('dont_refetch', False):
             params['context'] = context_fetcher(' '.join(history + [user_input]), context)
 
-        # create required format of context: dict with entry_id -> list of sentences (strings)
-        if isinstance(params['context'], str):
-            params['context'] = {'user': params['context']}
-
+        # sentencize context entries, if necessary
         for k, v in params['context'].items():
             if isinstance(v, str):
                 assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
