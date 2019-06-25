@@ -260,7 +260,13 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
         response_data = json.loads(response.text)
         assert len(response_data['entities']) > 0, 'no entities found'
         for entity in response_data['entities']:
+            if 'wikipediaExternalRef' not in entity:
+                logger.warning('entity "%s" (selection confidence: %s; disambiguation confidence: %s) has no wikipediaExternalRef. Skip it.'
+                               % (entity['rawName'], entity['nerd_selection_score'], entity['nerd_score']))
+                continue
             wikipedia_entity_uri = wikipedia_base_uri + str(entity['wikipediaExternalRef'])
+            logger.debug('found "%s" with selection confidence of %s and disambiguation confidence of %s'
+                         % (wikipedia_entity_uri, entity['nerd_selection_score'], entity['nerd_score']))
             # fetch only not already available context
             if wikipedia_entity_uri not in res:
                 logger.info('fetch entity data for "%s"...' % entity['rawName'])
