@@ -21,7 +21,7 @@ import torch.nn.functional as F
 
 from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2LMHeadModel, GPT2Tokenizer
 
-from more_utils import create_sentencizer, create_context_fetcher
+from more_utils import create_sentencizer, create_wikipedia_context_fetcher
 from train import SPECIAL_TOKENS, build_input_from_segments
 from utils import get_dataset_personalities, download_pretrained_model
 from flask import Flask, g, jsonify, Response, request
@@ -172,16 +172,24 @@ def ask():
         history = params.get('history', [])
         user_input = params['user_input']
 
-        if 'context' not in params:
+        context = params.get('context', None)
+        if context is None:
             assert context_fetcher is not None, 'No context fetcher initialized (requires a spacy model). Please provide a context with every request.'
-            params['context'] = context_fetcher(user_input)
+            params['context'] = context_fetcher(' '.join(history + [user_input]))
+        elif context_fetcher is not None and not params.get('dont_refetch', False):
+            params['context'] = context_fetcher(' '.join(history + [user_input]), context)
 
+        # create required format of context: dict with entry_id -> list of sentences (strings)
         if isinstance(params['context'], str):
-            assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
-            params['context'] = sentencizer(params['context'])
+            params['context'] = {'user': params['context']}
+
+        for k, v in params['context'].items():
+            if isinstance(v, str):
+                assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
+                params['context'][k] = sentencizer(v)
 
         history.append(user_input)
-        context_encoded = [tokenizer.encode(sentence) for sentence in params['context']]
+        context_encoded = [tokenizer.encode(sentence) for sentence in chain(*params['context'].values())]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
             out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
@@ -329,7 +337,7 @@ if __name__ == "__main__":
     if args.start_endpoint:
         try:
             logger.info('create wikipedia context fetcher ...')
-            context_fetcher = create_context_fetcher(wikipedia_file=args.wikipedia_dump)
+            context_fetcher = create_wikipedia_context_fetcher(wikipedia_file=args.wikipedia_dump)
         except IOError as e:
             logger.warning('could not create a context fetcher. Please provide a context with every request.' % args.spacy_model)
             context_fetcher = None
