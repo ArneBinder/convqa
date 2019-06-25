@@ -109,7 +109,7 @@ runs/Jun20_20-31-41_serv-9200/predictions.json
     "f1": 57.5,
     "turns": 7983
   }
-cmd_interact `CUDA_VISIBLE_DEVICES=0 python ./interact.py --model gpt2 --model_checkpoint runs/Jun20_20-31-41_serv-9200 --max_history 2 --start_endpoint`
+cmd_interact `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model gpt2 --model_checkpoint runs/Jun20_20-31-41_serv-9200 --max_history 2 --start_endpoint --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle`
 
 
 ### train with gpt --n_epochs 3
