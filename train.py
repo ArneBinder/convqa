@@ -192,6 +192,7 @@ def train():
         model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
+        logger.info('train on %i GPUs' % n_gpu)
 
     logger.info("Prepare datasets")
     max_sequence_length = model_config.n_ctx if args.max_sequence_length <= 0 else args.max_sequence_length
