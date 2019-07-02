@@ -141,6 +141,24 @@ checkpoints runs/Jun25_17-09-50_serv-9200
 load from previous run:
 cmd_train `CUDA_VISIBLE_DEVICES=4,5 python ./train.py --model_checkpoint runs/Jun20_20-31-41_serv-9200 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 3 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda &> train4.log`
 checkpoints runs/Jun20_20-31-41_serv-9200
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 36:18:42
+Validation: {'accuracy': 0.03418803418803419,
+ 'average_accuracy': 0.03418803418803419,
+ 'average_nll': 5.482427811490764,
+ 'average_ppl': 240.42971739929123,
+ 'nll': 5.482427811490764}
+Validation: {'accuracy': 0.03984414278531925,
+ 'average_accuracy': 0.03984414278531925,
+ 'average_nll': 5.483510004778853,
+ 'average_ppl': 240.69004966522613,
+ 'nll': 5.483510004778853}
+Validation: {'accuracy': 0.032679738562091505,
+ 'average_accuracy': 0.032679738562091505,
+ 'average_nll': 5.4753863492942205,
+ 'average_ppl': 238.7426871835913,
+ 'nll': 5.4753863492942205}
+
+
 
 ### train gpt2-medium --max_sequence_length 512
 cmd_train `CUDA_VISIBLE_DEVICES=1 python ./train.py --model_checkpoint gpt2-medium --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train1.log`
