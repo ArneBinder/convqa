@@ -77,7 +77,8 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
 
     instance["input_ids"] = list(chain(*sequence))
     # set persona and speaker1 utterances to speaker1-type and set speaker2 utterances to speaker2-type
-    instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+    #instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+    instance["token_type_ids"] = [s[0] for i, s in enumerate(sequence) for _ in s]
     if max_sequence_length:
         instance["input_ids"] = instance["input_ids"][:max_sequence_length]
         instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
