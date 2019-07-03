@@ -184,23 +184,27 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
         out = os.path.join(os.path.dirname(coqa_train), '%s.json' % fn)
 
     sentencizer = create_sentencizer()
+    coqa_converted = {}
     #print('convert dev...')
     coqa_dev = json.load(open(coqa_dev))['data']
-    coqa_converted_dev = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
+    coqa_converted['valid'] = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
                                                    n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
                                                    max_sentences_persona=max_sents_persona,
-                                                   create_question_utterances=create_question_utterances)
+                                                   create_question_utterances=False)
+    if create_question_utterances:
+        coqa_converted['valid_questionutterances'] = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
+                                                       n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
+                                                       max_sentences_persona=max_sents_persona,
+                                                       create_question_utterances=True)
     logger.info('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
-    coqa_converted_train = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
+    coqa_converted['train'] = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
                                                      n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
                                                      max_sentences_persona=max_sents_persona,
                                                      create_question_utterances=create_question_utterances)
+
     logger.info('dump to json: %s ...' % out)
-    json.dump({'train': coqa_converted_train,
-               'valid': coqa_converted_dev
-               },
-              open(out, 'w'), indent=2)
+    json.dump(coqa_converted, open(out, 'w'), indent=2)
     return out
 
 

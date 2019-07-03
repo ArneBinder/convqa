@@ -96,7 +96,8 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
 
     logger.info("Build inputs and labels")
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
-    for dataset_name, dataset in personachat.items():
+    for dataset_name in datasets.keys():
+        dataset = personachat[dataset_name]
         n = 0
         counter_truncated = Counter()
         num_candidates = len(dataset[0]["utterances"][0]["candidates"])
