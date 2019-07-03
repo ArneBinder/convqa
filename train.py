@@ -21,12 +21,13 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 
 from utils import get_dataset
 
+# NOTE: the padding token has to be at SPECIAL_TOKENS[-1]!
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 # implemented models:
-# model name -> (<Tokenizer class>, <DoubleHeadsModel class>)
+#   <model name> -> (<Tokenizer class>, <DoubleHeadsModel class>, <LMHeadModel>)
 # see huggingface/pytorch-pretrained-bert for available model names
 MODELS = {
     'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
@@ -66,10 +67,14 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
         bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
 
     instance = {}
+    # create sequence list: [bos+persona, history0, ..., historyN, reply+(eos)]
     sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
+    # prepend speaker1/2 to history entries and current reply:
+    #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
     sequence = [sequence[0]] + [[speaker2 if (len(sequence)-i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
 
     instance["input_ids"] = list(chain(*sequence))
+    # set persona and speaker1 utterances to speaker1-type and set speaker2 utterances to speaker2-type
     instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
     if max_sequence_length:
         instance["input_ids"] = instance["input_ids"][:max_sequence_length]
