@@ -11,20 +11,16 @@ import sys
 import time
 import traceback
 from argparse import ArgumentParser
-from collections import Counter
 from itertools import chain
 from pprint import pformat
 from tqdm import tqdm
-
 import torch
 import torch.nn.functional as F
-
-from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2LMHeadModel, GPT2Tokenizer
+from flask import Flask, g, jsonify, Response, request
 
 from more_utils import create_sentencizer, create_wikipedia_context_fetcher
-from train import SPECIAL_TOKENS, build_input_from_segments
+from train import SPECIAL_TOKENS, MODELS, build_input_from_segments
 from utils import get_dataset_personalities, download_pretrained_model
-from flask import Flask, g, jsonify, Response, request
 
 endpoint = Flask(__name__, static_url_path='')
 #cors = CORS(endpoint)
@@ -219,7 +215,7 @@ def init():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
-    parser.add_argument("--model", type=str, default="gpt", help="Model type (gpt or gpt2)")
+    parser.add_argument("--model", type=str, default="gpt", help="Model type, one of: %s" % ', '.join(MODELS.keys()))
     parser.add_argument("--model_checkpoint", type=str, default="", help="Path, url or short name of the model")
     parser.add_argument("--max_history", type=int, default=2, help="Number of previous utterances to keep in history")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
@@ -253,9 +249,11 @@ def init():
     torch.cuda.manual_seed(args.seed)
 
     logger.info("Get pretrained model and tokenizer")
-    tokenizer_class = GPT2Tokenizer if "gpt2" == args.model else OpenAIGPTTokenizer
+    if args.model not in MODELS:
+        raise NotImplementedError('model "%s" not implemented. use one of %s' % (args.model, str(MODELS.keys)))
+    tokenizer_class, _, model_class = MODELS[args.model]
+
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
-    model_class = GPT2LMHeadModel if "gpt2" == args.model else OpenAIGPTLMHeadModel
     model = model_class.from_pretrained(args.model_checkpoint)
 
     model.to(args.device)
