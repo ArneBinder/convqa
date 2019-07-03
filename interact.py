@@ -70,12 +70,12 @@ def sample_sequence(personality, history, tokenizer, model, args, current_output
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
-    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
+    special_tokens_ids = tokenizer.special_tokens.values()
     logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)' % (len(list(chain(*(personality + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
-        instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, with_eos=False,
+        instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'

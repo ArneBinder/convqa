@@ -22,7 +22,7 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 from utils import get_dataset
 
 # NOTE: the padding token has to be at SPECIAL_TOKENS[-1]!
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "<speaker1>", "<speaker2>", "<pad>"]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
@@ -59,16 +59,16 @@ def pad_dataset(dataset, padding=0):
     return dataset
 
 
-def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=False, with_eos=True, return_strings=False, max_sequence_length=None):
+def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None, return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
     if return_strings:
-        bos, eos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
+        bos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
     else:
-        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
+        bos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
 
     instance = {}
     # create sequence list: [bos+persona, history0, ..., historyN, reply+(eos)]
-    sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
+    sequence = [[bos] + list(chain(*context))] + history + [reply + ([eos] if eos is not None else [])]
     # prepend speaker1/2 to history entries and current reply:
     #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
     sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
@@ -92,26 +92,36 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
 
 
 def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None):
-    """ Prepare the dataset for training and evaluation """
-    personachat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, as_strings=as_strings)
-
-    logger.info("Build inputs and labels")
+    """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
-    for dataset_name in datasets.keys():
-        dataset = personachat[dataset_name]
-        n = 0
-        counter_truncated = Counter()
-        num_candidates = len(dataset[0]["utterances"][0]["candidates"])
-        if args.num_candidates > 0 and dataset_name == 'train':
-            num_candidates = min(args.num_candidates, num_candidates)
-        for dialog in dataset:
-            persona = dialog["personality"].copy()
-            for _ in range(args.personality_permutations):
+    dataset_paths = args.dataset_path.split(',')
+    for dataset_path in dataset_paths:
+        dataset_id = '<%s>' % os.path.basename(dataset_path)
+        assert dataset_id in tokenizer.special_tokens, \
+            'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
+            % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
+        dataset_id_converted = tokenizer.special_tokens[dataset_id] if not as_strings else dataset_id
+        loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache, as_strings=as_strings)
+
+        logger.info("Build inputs and labels for %s..." % os.path.basename(args.dataset_path))
+        for dataset_name in datasets.keys():
+            dataset = loaded_dataset[dataset_name]
+            n = 0
+            counter_truncated = Counter()
+            num_candidates = len(dataset[0]["utterances"][0]["candidates"])
+            if args.num_candidates > 0 and dataset_name == 'train':
+                num_candidates = min(args.num_candidates, num_candidates)
+            for dialog in dataset:
+                context = dialog["personality"] #.copy()
+                #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
                     history = utterance["history"][-(2*args.max_history+1):]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         lm_labels = bool(j == num_candidates-1)
-                        instance, sequence = build_input_from_segments(persona, history, candidate, tokenizer, lm_labels, return_strings=as_strings, max_sequence_length=max_sequence_length)
+                        instance, sequence = build_input_from_segments(context, history, candidate, tokenizer, lm_labels,
+                                                                       return_strings=as_strings,
+                                                                       max_sequence_length=max_sequence_length,
+                                                                       eos=dataset_id_converted)
                         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
                         if l_trunc > 0:
                             counter_truncated[l_trunc] += 1
@@ -120,9 +130,9 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                         n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
-                persona = [persona[-1]] + persona[:-1]  # permuted personalities
-        logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
-        logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
+                    #context = [context[-1]] + context[:-1]  # permuted personalities
+            logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
+            logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
 
     assert not as_strings, 'return_strings has to be False'
 
@@ -131,6 +141,7 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     for dataset_name, dataset in datasets.items():
         dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
         for input_name in MODEL_INPUTS:
+            x = dataset[input_name]
             tensor = torch.tensor(dataset[input_name])
             if input_name != "mc_labels":
                 tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
@@ -203,8 +214,9 @@ def train():
         args.model_checkpoint = args.model
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
     model = model_class.from_pretrained(args.model_checkpoint)
-    tokenizer.set_special_tokens(SPECIAL_TOKENS)
-    model.set_num_special_tokens(len(SPECIAL_TOKENS))
+    dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
+    tokenizer.set_special_tokens(SPECIAL_TOKENS + dataset_ids)
+    model.set_num_special_tokens(len(tokenizer.special_tokens))
     model.to(args.device)
     optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
     model_config = model.config
@@ -225,7 +237,7 @@ def train():
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model_config.n_ctx)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, # return_strings=True,
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, #as_strings=True,
                                                                               max_sequence_length=max_sequence_length)
 
     # Training function and trainer
