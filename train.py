@@ -71,7 +71,9 @@ def build_input_from_segments(persona, history, reply, tokenizer, lm_labels=Fals
     sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
     # prepend speaker1/2 to history entries and current reply:
     #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
-    sequence = [sequence[0]] + [[speaker2 if (len(sequence)-i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
+    sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
+    sequence_deprecated = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
+    assert all([sequence_deprecated[i] == sequence[i] for i in range(len(sequence))]), 'mismatch'
 
     instance["input_ids"] = list(chain(*sequence))
     # set persona and speaker1 utterances to speaker1-type and set speaker2 utterances to speaker2-type
