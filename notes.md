@@ -157,7 +157,7 @@ Validation: {'accuracy': 0.032679738562091505,
  'average_nll': 5.4753863492942205,
  'average_ppl': 238.7426871835913,
  'nll': 5.4753863492942205}
-
+--> loaded as wrong TOKENIZATION+MODEL (fixed)
 
 
 ### train gpt2-medium --max_sequence_length 512
