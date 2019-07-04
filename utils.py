@@ -49,9 +49,14 @@ def get_dataset(tokenizer, dataset_path, dataset_cache=None, as_strings=False):
                 tokens = tokenizer.tokenize(obj)
                 if as_strings:
                     return tokens
-                return tokenizer.convert_tokens_to_ids(tokens)
+                tokenizer.convert_tokens_to_ids(tokens)
+            if isinstance(obj, tuple) and len(obj) == 2 and isinstance(obj[0], str):
+                speaker, obj = obj
+                if as_strings:
+                    return speaker, tokenize(obj)
+                return tokenizer.special_tokens[speaker], tokenize(obj)
             if isinstance(obj, dict):
-                return dict((n, tokenize(o)) for n, o in obj.items())
+                return dict((n, tokenize(' '.join(o))) if n == 'personality' and isinstance(o, list) else (n, tokenize(o)) for n, o in obj.items())
             return list(tokenize(o) for o in obj)
         dataset = tokenize(dataset)
         if dataset_cache:

@@ -22,7 +22,7 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 from utils import get_dataset
 
 # NOTE: the padding token has to be at SPECIAL_TOKENS[-1]!
-SPECIAL_TOKENS = ["<bos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "<speaker0>", "<speaker1>", "<speaker2>", "<pad>"]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
@@ -59,39 +59,41 @@ def pad_dataset(dataset, padding=0):
     return dataset
 
 
-def build_input_from_segments(context, persona1, persona2, history, reply, tokenizer, lm_labels=False, eos=None,
+def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None,
                               return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
     if return_strings:
-        bos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
+        bos = SPECIAL_TOKENS[0]
+        if eos is not None:
+            eos = tokenizer.special_tokens_decoder[eos]
     else:
-        bos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
+        bos = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[0])
 
     instance = {}
-    dialog = history + [reply + ([eos] if eos is not None else [])]
+    sequence = context + history + [reply]
+    sequence = [[speaker if not return_strings else tokenizer.special_tokens_decoder[speaker]] + u for speaker, u in sequence]
     # mark (prepend) utterances with: speaker1, speaker2, speaker1, speaker2, ...
-    dialog = [[speaker2 if i % 2 else speaker1] + s for i, s in enumerate(dialog)]
-    # allow empty personas
-    if persona1:
-        persona1 = [speaker1] + persona1
-    if persona2:
-        persona2 = [speaker2] + persona2
+    #dialog = [[speaker2 if i % 2 else speaker1] + s for i, s in enumerate(dialog)]
 
     # create sequence list: [bos+persona, history0, ..., historyN, reply+(eos)]
-    sequence = [[bos] + context] + persona1 + persona2 + dialog
+    #sequence = [[bos] + context] + persona1 + persona2 + dialog
     # prepend speaker1/2 to history entries and current reply:
     #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
     #sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
     #sequence_deprecated = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
     #assert all([sequence_deprecated[i] == sequence[i] for i in range(len(sequence))]), 'mismatch'
 
-    instance["input_ids"] = list(chain(*sequence))
+    instance["input_ids"] = [bos] + list(chain(*sequence)) + [eos] if eos is not None else []
     # set persona and speaker1 utterances to speaker1-type and set speaker2 utterances to speaker2-type
     #instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
     instance["token_type_ids"] = [s[0] for i, s in enumerate(sequence) for _ in s]
-    if max_sequence_length:
-        instance["input_ids"] = instance["input_ids"][:max_sequence_length]
-        instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
+    instance["token_type_ids"] = [instance["token_type_ids"][0]] + instance["token_type_ids"] + [instance["token_type_ids"][-1]] if eos is not None else []
+    #if return_strings:
+    #    instance["input_ids"] = tokenizer.convert_ids_to_tokens(instance["input_ids"])
+    #    instance["token_type_ids"] = tokenizer.convert_ids_to_tokens(instance["token_type_ids"])
+    #if max_sequence_length:
+    #    instance["input_ids"] = instance["input_ids"][:max_sequence_length]
+    #    instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
     instance["mc_token_ids"] = len(instance["input_ids"]) - 1
     instance["lm_labels"] = [-1] * len(instance["input_ids"])
     if lm_labels:
@@ -105,12 +107,16 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
+    speaker0 = tokenizer.special_tokens['<speaker0>']
+    speaker1 = tokenizer.special_tokens['<speaker1>']
+    speaker2 = tokenizer.special_tokens['<speaker2>']
+
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
         assert dataset_id in tokenizer.special_tokens, \
             'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
             % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
-        dataset_id_converted = tokenizer.special_tokens[dataset_id] if not as_strings else dataset_id
+        dataset_id_converted = tokenizer.special_tokens[dataset_id]
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache, as_strings=as_strings)
 
         logger.info("Build inputs and labels for %s..." % os.path.basename(args.dataset_path))
@@ -122,15 +128,40 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
             if args.num_candidates > 0 and dataset_name == 'train':
                 num_candidates = min(args.num_candidates, num_candidates)
             for dialog in dataset:
-                context = dialog.get("context", []) #.copy()
-                persona1 = dialog.get("personality1", dialog.get("personality",[]))
-                persona2 = dialog.get("personality2", [])
+                context = []
+                # TODO: key "context" is confusing / overlaps with "context" in build_input_from_segments
+                if 'context' in dialog:
+                    if not isinstance(dialog['context'], tuple):
+                        context.append((speaker0, dialog['context']))
+                    else:
+                        context.append(dialog['context'])
+
+                last_speaker = None
+                if 'personality' in dialog:
+                    context.append((speaker1, dialog['personality']))
+                if len(context) > 0:
+                    last_speaker = context[-1][0]
+
+                #persona1 = dialog.get("personality1", dialog.get("personality",[]))
+                #persona2 = dialog.get("personality2", [])
                 #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
+                    if len(utterance["history"]) > 0 and not isinstance(utterance["history"][0], tuple):
+                        # add speakers (beginning with speaker2 because added personality was from speaker1)
+                        for i, h in enumerate(utterance["history"]):
+                            last_speaker = speaker2 if last_speaker == speaker1 else speaker1
+                            utterance["history"][i] = (last_speaker, utterance["history"][i])
+
                     history = utterance["history"][-(2*args.max_history+1):]
+                    if len(history) > 0:
+                        last_speaker = history[-1][0]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
+                        # add speaker, if necessary
+                        if not isinstance(candidate, tuple):
+                            speaker = speaker2 if last_speaker == speaker1 else speaker1
+                            candidate = (speaker, candidate)
                         lm_labels = bool(j == num_candidates-1)
-                        instance, sequence = build_input_from_segments(context, persona1, persona2, history, candidate,
+                        instance, sequence = build_input_from_segments(context, history, candidate,
                                                                        tokenizer, lm_labels,
                                                                        return_strings=as_strings,
                                                                        max_sequence_length=max_sequence_length,
@@ -249,7 +280,7 @@ def train():
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model_config.n_ctx)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, #as_strings=True,
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, as_strings=False,
                                                                               max_sequence_length=max_sequence_length)
 
     # Training function and trainer

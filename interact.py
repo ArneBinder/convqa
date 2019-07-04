@@ -71,13 +71,18 @@ def sample_sequence(context, history, tokenizer, model, args, current_output=Non
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
+    speaker0 = tokenizer.special_tokens['<speaker0>']
+    speaker1 = tokenizer.special_tokens['<speaker1>']
+    speaker2 = tokenizer.special_tokens['<speaker2>']
     logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
                  % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
-        instance, sequence = build_input_from_segments(context=context, persona1=[], persona2=[], history=history,
-                                                       reply=current_output, tokenizer=tokenizer, eos=None,
+        # TODO: adapt changes of build_input_from_segments (expects list of tuples: context and history. Check that!)
+        instance, sequence = build_input_from_segments(context=[(speaker0, context)],
+                                                       history=[(speaker2 if (len(history) - i) % 2 else speaker1, h) for i, h in enumerate(history)],
+                                                       reply=(speaker1, current_output), tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
