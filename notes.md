@@ -186,8 +186,8 @@ Validation: {'accuracy': 0.854323780794369,
 
 ## planned
  * train with different (QA) datasets:
-    * ShARC
     * Persona-Chat (ConvAI2)
+    * ShARC
     * HotpotQA
     * QAngaroo
     * ...

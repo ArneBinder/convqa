@@ -64,18 +64,20 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(personality, history, tokenizer, model, args, current_output=None):
+def sample_sequence(context, history, tokenizer, model, args, current_output=None):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)' % (len(list(chain(*(personality + history)))) + len(history) + 1, max_sequence_length))
+    logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
+                 % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
-        instance, sequence = build_input_from_segments(personality, history, current_output, tokenizer, eos=None,
+        instance, sequence = build_input_from_segments(context=context, persona1=[], persona2=[], history=history,
+                                                       reply=current_output, tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
@@ -190,7 +192,8 @@ def ask():
         context_encoded = [tokenizer.encode(sentence) for sentence in chain(*params['context'].values())]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
-            out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
+            out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
+                                      model=model, args=args)
         history_encoded.append(out_ids)
         history_encoded = history_encoded[-(2 * args.max_history + 1):]
         params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
@@ -283,7 +286,8 @@ def run(tokenizer, model, args):
                 history_encoded.append(tokenizer.encode(question_text))
                 with torch.no_grad():
                     try:
-                        out_ids = sample_sequence(context_encoded, history_encoded, tokenizer, model, args)
+                        out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
+                                                  model=model, args=args)
                         history_encoded.append(out_ids)
                         history_encoded = history_encoded[-(2 * args.max_history + 1):]
                         answer_text = tokenizer.decode(out_ids, skip_special_tokens=True)
@@ -315,7 +319,8 @@ def run(tokenizer, model, args):
                 raw_text = input(">>> ")
             history_encoded.append(tokenizer.encode(raw_text))
             with torch.no_grad():
-                out_ids = sample_sequence(personality, history_encoded, tokenizer, model, args)
+                out_ids = sample_sequence(context=personality, history=history_encoded, tokenizer=tokenizer,
+                                          model=model, args=args)
             history_encoded.append(out_ids)
             history_encoded = history_encoded[-(2*args.max_history+1):]
             out_text = tokenizer.decode(out_ids, skip_special_tokens=True)

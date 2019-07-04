@@ -59,7 +59,8 @@ def pad_dataset(dataset, padding=0):
     return dataset
 
 
-def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None, return_strings=False, max_sequence_length=None):
+def build_input_from_segments(context, persona1, persona2, history, reply, tokenizer, lm_labels=False, eos=None,
+                              return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
     if return_strings:
         bos, speaker1, speaker2 = SPECIAL_TOKENS[:-1]
@@ -67,11 +68,20 @@ def build_input_from_segments(context, history, reply, tokenizer, lm_labels=Fals
         bos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
 
     instance = {}
+    dialog = history + [reply + ([eos] if eos is not None else [])]
+    # mark (prepend) utterances with: speaker1, speaker2, speaker1, speaker2, ...
+    dialog = [[speaker2 if i % 2 else speaker1] + s for i, s in enumerate(dialog)]
+    # allow empty personas
+    if persona1:
+        persona1 = [speaker1] + persona1
+    if persona2:
+        persona2 = [speaker2] + persona2
+
     # create sequence list: [bos+persona, history0, ..., historyN, reply+(eos)]
-    sequence = [[bos] + list(chain(*context))] + history + [reply + ([eos] if eos is not None else [])]
+    sequence = [[bos] + context] + persona1 + persona2 + dialog
     # prepend speaker1/2 to history entries and current reply:
     #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
-    sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
+    #sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
     #sequence_deprecated = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
     #assert all([sequence_deprecated[i] == sequence[i] for i in range(len(sequence))]), 'mismatch'
 
@@ -112,13 +122,16 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
             if args.num_candidates > 0 and dataset_name == 'train':
                 num_candidates = min(args.num_candidates, num_candidates)
             for dialog in dataset:
-                context = dialog["personality"] #.copy()
+                context = dialog.get("context", []) #.copy()
+                persona1 = dialog.get("personality1", dialog.get("personality",[]))
+                persona2 = dialog.get("personality2", [])
                 #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
                     history = utterance["history"][-(2*args.max_history+1):]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         lm_labels = bool(j == num_candidates-1)
-                        instance, sequence = build_input_from_segments(context, history, candidate, tokenizer, lm_labels,
+                        instance, sequence = build_input_from_segments(context, persona1, persona2, history, candidate,
+                                                                       tokenizer, lm_labels,
                                                                        return_strings=as_strings,
                                                                        max_sequence_length=max_sequence_length,
                                                                        eos=dataset_id_converted)
