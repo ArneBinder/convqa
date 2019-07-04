@@ -90,6 +90,7 @@ cmd_eval `python evaluate-v1.0.py --data-file /home/abinder/datasets/CoQA/coqa-d
     "f1": 6.7,
     "turns": 7983
   }
+(WRONG token_type_ids!)
 
 
 ### train with gpt2 --max_sequence_length 512
@@ -157,7 +158,7 @@ Validation: {'accuracy': 0.032679738562091505,
  'average_nll': 5.4753863492942205,
  'average_ppl': 238.7426871835913,
  'nll': 5.4753863492942205}
---> loaded as wrong TOKENIZATION+MODEL (fixed)
+--> loaded as wrong TOKENIZER+MODEL (fixed)
 
 
 ### train gpt2-medium --max_sequence_length 512
@@ -184,11 +185,16 @@ Validation: {'accuracy': 0.854323780794369,
     * set up own (entity-fishing) server
 
 ## planned
+ * train with different (QA) datasets:
+    * ShARC
+    * Persona-Chat (ConvAI2)
+    * HotpotQA
+    * QAngaroo
+    * ...
 
 ## progress
- * predict questions - eval
- * use gpt2 - eval
- * train more epochs - eval
+ * predict questions - train, eval
+ * train more epochs - train, eval
 
 ## done
  * evaluate original@personachat
@@ -197,7 +203,7 @@ Validation: {'accuracy': 0.854323780794369,
  * eval original@coqa
  * predict questions - train
  * train more epochs - train
- * use gpt2 - train (max_sequence_length=512)
+ * use gpt2 - train (max_sequence_length=512), eval (no length restriction)
  * implement context fetching:
     1. entity linking on user_data (e.g. see https://nerd.readthedocs.io/en/latest/overview.html)
     2. fetch wikipedia content (e.g. abstract)
