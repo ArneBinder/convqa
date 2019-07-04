@@ -172,6 +172,11 @@ checkpoints to: runs/Jul03_20-16-42_serv-9200
 git branch: bos_as_background_token_type
 cmd_train `CUDA_VISIBLE_DEVICES=3 python ./train.py --model_checkpoint gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_maxsent1.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train3.log`
 checkpoints to: runs/Jul03_20-59-33_serv-9200
+Validation: {'accuracy': 0.854323780794369,
+ 'average_accuracy': 0.854323780794369,
+ 'average_nll': 1.145655474075654,
+ 'average_ppl': 3.144501820899453,
+ 'nll': 1.145655474075654}
 
 
 ## ideas
