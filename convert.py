@@ -7,6 +7,7 @@ import tarfile
 from collections import Counter
 
 import numpy as np
+import plac
 from tqdm import tqdm
 
 from interact import create_sentencizer
@@ -338,9 +339,11 @@ def dummy_tokenize():
     return tokenized_text
 
 
-def convert_coqa(create_question_utterances=True, max_sentences_qa=1, sentencizer=create_sentencizer()):
+def convert_coqa(directory='/mnt/DATA/ML/data/corpora/QA/CoQA', create_question_utterances=True, max_sentences_qa=1):
     # convert CoQA to conversational QA format
-    return convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/CoQA',
+    logger.info('load data from directory: %s' % directory)
+    sentencizer = create_sentencizer() if max_sentences_qa >= 0 else None
+    return convert_to_dialog(dir=directory,
                              dev='coqa-dev-v1.0.json',
                              train='coqa-train-v1.0.json',
                              out=None,
@@ -350,7 +353,7 @@ def convert_coqa(create_question_utterances=True, max_sentences_qa=1, sentencize
 
 
 
-def convert_squad(create_question_utterances=False, max_sentences_qa=1, sentencizer=create_sentencizer()):
+def convert_squad(directory='/mnt/DATA/ML/data/corpora/QA/SQaAD', create_question_utterances=True, max_sentences_qa=1):
     # convert SQaAD to conversational QA format
     def squad_data_loader(fn):
         data = json.load(open(fn))
@@ -358,7 +361,9 @@ def convert_squad(create_question_utterances=False, max_sentences_qa=1, sentenci
             for paragraph in article['paragraphs']:
                 yield paragraph
 
-    return convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/SQaAD',
+    sentencizer = create_sentencizer() if max_sentences_qa >= 0 else None
+    logger.info('load data from directory: %s' % directory)
+    return convert_to_dialog(dir=directory,
                              dev='dev-v2.0.json',
                              train='train-v2.0.json',
                              out=None,
@@ -368,15 +373,20 @@ def convert_squad(create_question_utterances=False, max_sentences_qa=1, sentenci
     # stats: train: 7199; valid: 500
 
 
-
-if __name__ == '__main__':
-    #stats: train: 17878; valid: 1000
-    #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
-
-    #out_fn = convert_coqa()
-    out_fn = convert_squad()
+def main(dataset: ('the dataset', 'positional', None, str, ['CoQA', 'SQuAD']),
+         *args: ('dataset specific parameters',)):
+    logger.info('convert %s dataset to dialog format...' % dataset)
+    if dataset == 'CoQA':
+        out_fn = plac.call(convert_coqa, args)
+    elif dataset == 'SQuAD':
+        out_fn = plac.call(convert_squad, args)
+    else:
+        raise NotImplementedError('no converter for dataset "%s" implemented' % dataset)
 
     gen_dataset_extract(fn=out_fn, extract_size=10, start_idx=0)
     #x = dummy_tokenize()
-
     logger.info('done')
+
+
+if __name__ == '__main__':
+    plac.call(main)
