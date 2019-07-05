@@ -74,8 +74,8 @@ def sample_sequence(context, history, tokenizer, model, args, current_output=Non
     speaker0 = tokenizer.special_tokens['<speaker0>']
     speaker1 = tokenizer.special_tokens['<speaker1>']
     speaker2 = tokenizer.special_tokens['<speaker2>']
-    logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
-                 % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
+    #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
+    #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
@@ -187,14 +187,8 @@ def ask():
         elif context_fetcher is not None and not params.get('dont_refetch', False):
             params['context'] = context_fetcher(' '.join(history + [user_input]), context)
 
-        # sentencize context entries, if necessary
-        for k, v in params['context'].items():
-            if isinstance(v, str):
-                assert sentencizer is not None, 'No sentencizer initialized (requires a spacy model). Please provide a list of sentences (strings) as "context"'
-                params['context'][k] = sentencizer(v)
-
         history.append(user_input)
-        context_encoded = [tokenizer.encode(sentence) for sentence in chain(*params['context'].values())]
+        context_encoded = [tokenizer.encode(article) for article in params['context'].values()]
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
             out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
@@ -337,7 +331,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__file__)
 
     tokenizer, model, args = init()
-    if args.start_endpoint or args.coqa_file:
+    if args.coqa_file:
         try:
             logger.info('create sentencizer with spacy ...')
             sentencizer = create_sentencizer(spacy_model=args.spacy_model)
