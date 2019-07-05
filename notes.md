@@ -188,16 +188,14 @@ Validation: {'accuracy': 0.854323780794369,
 
 ### train multi dataset (coqa + personachat)
 git branch: train_multipel_datasets
-cmd_train extract10 `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/personachat/personachat_self_original_extract10.json,/home/abinder/datasets/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
-Validation: {'accuracy': 0.10232558139534884,
+extract10 cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/personachat/personachat_self_original_extract10.json,/home/abinder/datasets/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
+extract10 Validation: {'accuracy': 0.10232558139534884,
  'average_accuracy': 0.10232558139534884,
  'average_nll': 8.273027531490769,
  'average_ppl': 3916.789262549397,
  'nll': 8.273027531490769}
-
-
-
 cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/personachat/personachat_self_original.json,/home/abinder/datasets/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
+checkpoints to: runs/Jul05_14-26-36_serv-9200
 
 
 
@@ -208,6 +206,7 @@ cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path 
 ## planned
  * train with different (QA) datasets:
     * Persona-Chat (ConvAI2)
+    * SQaAD 2.0
     * ShARC
     * HotpotQA
     * QAngaroo
