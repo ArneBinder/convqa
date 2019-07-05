@@ -21,7 +21,6 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 
 from utils import get_dataset
 
-# NOTE: the padding token has to be at SPECIAL_TOKENS[-1]!
 MARKER_BOS = "<bos>"
 MARKER_BACKGROUND = "<background>"
 MARKER_SPEAKER1 = "<speaker1>"
@@ -54,10 +53,6 @@ def pad_dataset(dataset, padding=0):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padd only batches but this is simpler. """
     l_counter = Counter((len(x) for x in dataset["input_ids"]))
     max_l = max(l_counter.keys())
-    #if 0 < max_sequence_length < max_l:
-    #    bigger_l = {k: l_counter[k] for k in l_counter.keys() if k > max_sequence_length}
-    #    logger.warning('%i of %i entries exceed max_sequence_length=%i (these inputs will be truncated): \n%s'
-    #                   % (sum(bigger_l.values()), len(dataset["input_ids"]), max_sequence_length, bigger_l))
 
     for name in PADDED_INPUTS:
         dataset[name] = [x + [padding if name != "lm_labels" else -1] * (max_l - len(x)) for x in dataset[name]]
@@ -67,38 +62,26 @@ def pad_dataset(dataset, padding=0):
 def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None,
                               return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
-    bos = tokenizer.convert_tokens_to_ids(MARKER_BOS) if not return_strings else MARKER_BOS
+    bos = tokenizer.special_tokens[MARKER_BOS] if not return_strings else MARKER_BOS
 
     instance = {}
     sequence = context + history + [reply]
-    sequence = [[speaker if not return_strings else tokenizer.special_tokens_decoder[speaker]] + u for speaker, u in sequence]
-    # mark (prepend) utterances with: speaker1, speaker2, speaker1, speaker2, ...
-    #dialog = [[speaker2 if i % 2 else speaker1] + s for i, s in enumerate(dialog)]
-
-    # create sequence list: [bos+persona, history0, ..., historyN, reply+(eos)]
-    #sequence = [[bos] + context] + persona1 + persona2 + dialog
-    # prepend speaker1/2 to history entries and current reply:
-    #   [bos+persona, speaker1+history0, ..., speaker2+historyN, speaker1+reply+(eos)]
-    #sequence = [sequence[0]] + [[speaker2 if (i + 1) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
-    #sequence_deprecated = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
-    #assert all([sequence_deprecated[i] == sequence[i] for i in range(len(sequence))]), 'mismatch'
+    sequence = [[bos]] + [[speaker] + u for speaker, u in sequence]
 
     if eos is not None:
         sequence[-1].append(eos)
 
-    # token_type_ids is set to first token of every sequence. Note that the first sequence starting with <bos> is handled differently
-    instance["input_ids"] = [bos] + list(chain(*sequence))
-    # set persona and speaker1 utterances to speaker1-type and set speaker2 utterances to speaker2-type
-    #instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+    instance["input_ids"] = list(chain(*sequence))
+    # set types by first element of each sequence
     instance["token_type_ids"] = [s[0] for i, s in enumerate(sequence) for _ in s]
-    instance["token_type_ids"] = [instance["token_type_ids"][0]] + instance["token_type_ids"]
-    sequence[0] = [bos] + sequence[0]
-    #if return_strings:
-    #    instance["input_ids"] = tokenizer.convert_ids_to_tokens(instance["input_ids"])
-    #    instance["token_type_ids"] = tokenizer.convert_ids_to_tokens(instance["token_type_ids"])
-    #if max_sequence_length:
-    #    instance["input_ids"] = instance["input_ids"][:max_sequence_length]
-    #    instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
+    # DEBUG:
+    # list(zip(tokenizer.convert_ids_to_tokens(instance['token_type_ids']), tokenizer.convert_ids_to_tokens(instance['input_ids'])))
+    # list(zip(tokenizer.convert_ids_to_tokens(instance['token_type_ids'][-30:]), tokenizer.convert_ids_to_tokens(instance['input_ids'][-30:])))
+
+    if max_sequence_length:
+        instance["input_ids"] = instance["input_ids"][:max_sequence_length]
+        instance["token_type_ids"] = instance["token_type_ids"][:max_sequence_length]
+
     instance["mc_token_ids"] = len(instance["input_ids"]) - 1
     instance["lm_labels"] = [-1] * len(instance["input_ids"])
     if lm_labels:
@@ -188,7 +171,7 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
-        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
+        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(MARKER_PAD))
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
             if input_name != "mc_labels":
@@ -285,7 +268,7 @@ def train():
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model_config.n_ctx)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, as_strings=False,
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, #as_strings=True,
                                                                               max_sequence_length=max_sequence_length)
 
     # Training function and trainer
