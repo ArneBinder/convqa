@@ -13,6 +13,10 @@ import spacy
 from tqdm import tqdm
 
 logger = logging.getLogger(__file__)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+logger.addHandler(ch)
 
 # too large for memory
 def sample_neg_indices_old(n_instances, n_candidates):
@@ -74,12 +78,12 @@ def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona
 
     was_truncated = False
     instance = {}
-    instance['context'] = record['story']
+    instance['background'] = record['story']
     if max_sentences_persona is not None:
-        stats['persona']['n_sents'][len(instance['context'])] += 1
-        if len(instance['context']) > max_sentences_persona:
+        stats['persona']['n_sents'][len(instance['background'])] += 1
+        if len(instance['background']) > max_sentences_persona:
             was_truncated = True
-        instance['context'] = instance['context'][:max_sentences_persona]
+        instance['background'] = instance['background'][:max_sentences_persona]
 
     assert len(record['questions']) == len(record['answers']), 'number of questions / answers mismatch'
     #instance['utterances'] = []
@@ -112,17 +116,17 @@ def create_instance(record, sentencizer, max_sentences_qa, max_sentences_persona
 
     return instance, all_questions, all_answers, was_truncated
 
-def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences_qa=1, max_sentences_context=None,
+def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sentences_qa=1, max_sentences_background=None,
                               create_question_utterances=False):
     instances = []
     all_answers = []
     all_questions = []
-    stats = {'context': {'n_sents': Counter()}, 'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
+    stats = {'background': {'n_sents': Counter()}, 'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
     n_skipped = 0
     for record in coqa_data:
         instance, current_questions, current_answers, was_truncated = create_instance(
             record=record, sentencizer=sentencizer, max_sentences_qa=max_sentences_qa,
-            max_sentences_persona=max_sentences_context, stats=stats)
+            max_sentences_persona=max_sentences_background, stats=stats)
         if was_truncated:
             n_skipped += 1
             continue
@@ -130,7 +134,7 @@ def coqa_split_to_personachat(coqa_data, sentencizer, n_candidates=20, max_sente
         all_questions.extend(current_questions)
         all_answers.extend(current_answers)
     logger.info('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
-    logger.info('max_sentences_persona: %s' % str(max_sentences_context))
+    logger.info('max_sentences_persona: %s' % str(max_sentences_background))
     logger.info('max_sentences_qa: %s' % str(max_sentences_qa))
     logger.info(stats)
 
@@ -170,14 +174,14 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
                         out=None,
                         n_candidates=20,
                         max_sents_qa=1,
-                        max_sents_context=None,
+                        max_sents_background=None,
                         create_question_utterances=False):
     if out is None:
-        fn = 'coqa_converted_persona'
+        fn = '%s_converted_dialog' % os.path.dirname(coqa_train).lower()
         if max_sents_qa and max_sents_qa >= 0:
             fn += '_sentsqa%i' % max_sents_qa
-        if max_sents_context and max_sents_context >= 0:
-            fn += '_sentsp%i' % max_sents_context
+        if max_sents_background and max_sents_background >= 0:
+            fn += '_sentsp%i' % max_sents_background
         if create_question_utterances:
             fn += '_questionutterances'
 
@@ -189,18 +193,18 @@ def coqa_to_personachat(coqa_dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.
     coqa_dev = json.load(open(coqa_dev))['data']
     coqa_converted['valid'] = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
                                                         n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                        max_sentences_context=max_sents_context,
+                                                        max_sentences_background=max_sents_background,
                                                         create_question_utterances=False)
     if create_question_utterances:
         coqa_converted['valid_questionutterances'] = coqa_split_to_personachat(coqa_data=coqa_dev, sentencizer=sentencizer,
                                                                                n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                                               max_sentences_context=max_sents_context,
+                                                                               max_sentences_background=max_sents_background,
                                                                                create_question_utterances=True)
     logger.info('convert train...')
     coqa_train = json.load(open(coqa_train))['data']
     coqa_converted['train'] = coqa_split_to_personachat(coqa_data=coqa_train, sentencizer=sentencizer,
                                                         n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                        max_sentences_context=max_sents_context,
+                                                        max_sentences_background=max_sents_background,
                                                         create_question_utterances=create_question_utterances)
 
     logger.info('dump to json: %s ...' % out)
@@ -342,8 +346,8 @@ if __name__ == '__main__':
     #stats: train: 17878; valid: 1000
     #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
-    # convert CoQA to personachat
-    out_fn = coqa_to_personachat(max_sents_context=None, create_question_utterances=False)
+    # convert CoQA to conversational QA format
+    out_fn = coqa_to_personachat(max_sents_background=None, create_question_utterances=True)
     # stats: train: 7199; valid: 500
     gen_personachat_extract(fn=out_fn, extract_size=10, start_idx=0)
 
