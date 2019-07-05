@@ -85,6 +85,7 @@ def build_input_from_segments(context, history, reply, tokenizer, lm_labels=Fals
     instance["mc_token_ids"] = len(instance["input_ids"]) - 1
     instance["lm_labels"] = [-1] * len(instance["input_ids"])
     if lm_labels:
+        # predict next words only for last sequence (reply), but w/o to predict initial special token, e.g. <speaker1>!
         instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:]
         if max_sequence_length:
             instance["lm_labels"] = instance["lm_labels"][:max_sequence_length]
@@ -146,8 +147,9 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         # add speaker, if necessary
                         if not isinstance(candidate, tuple):
-                            speaker = speaker2 if last_speaker == speaker1 else speaker1
-                            candidate = (speaker, candidate)
+                            candidate_speaker = speaker2 if last_speaker == speaker1 else speaker1
+                            candidate = (candidate_speaker, candidate)
+                        # predict next words only for correct candidate (the last one)
                         lm_labels = bool(j == num_candidates-1)
                         instance, sequence = build_input_from_segments(context, history, candidate,
                                                                        tokenizer, lm_labels,
