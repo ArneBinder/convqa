@@ -16,11 +16,10 @@ from pprint import pformat
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
-from flask import Flask, g, jsonify, Response, request
+from flask import Flask, jsonify, Response, request
 
-from more_utils import create_sentencizer, create_wikipedia_context_fetcher
 from train import MODELS, build_input_from_segments, MARKER_BACKGROUND, MARKER_SPEAKER1, MARKER_SPEAKER2
-from utils import get_dataset_personalities, download_pretrained_model
+from utils import get_dataset_personalities, download_pretrained_model, create_wikipedia_context_fetcher
 
 endpoint = Flask(__name__, static_url_path='')
 #cors = CORS(endpoint)
@@ -324,6 +323,19 @@ def run(tokenizer, model, args):
             history_encoded = history_encoded[-(2*args.max_history+1):]
             out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
             print(out_text)
+
+
+def create_sentencizer(spacy_model='en_core_web_sm'):
+    import spacy
+    nlp = spacy.load(spacy_model)
+    nlp.add_pipe(nlp.create_pipe('sentencizer'))
+    #sentencizer = lambda s: [sent.text for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents]
+    def sentencizer(s):
+        sents = []
+        for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents:
+            sents.extend([_sent.strip() for _sent in sent.text.split('\n\n') if _sent.strip() != ''])
+        return sents
+    return sentencizer
 
 
 if __name__ == "__main__":
