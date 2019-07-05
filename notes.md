@@ -168,6 +168,12 @@ cmd_train `CUDA_VISIBLE_DEVICES=1 python ./train.py --model_checkpoint gpt2-medi
 ### train gpt2 w/ questions
 cmd_train `CUDA_VISIBLE_DEVICES=2,3 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/CoQA/coqa_converted_persona_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
 checkpoints to: runs/Jul03_20-16-42_serv-9200
+Validation: {'accuracy': 0.8545357666178234,
+ 'average_accuracy': 0.8545357666178234,
+ 'average_nll': 1.1782632779344868,
+ 'average_ppl': 3.2487271644895572,
+ 'nll': 1.1782632779344868}
+
 
 ### train gpt2 (<bos> as background token type)
 git branch: bos_as_background_token_type
