@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from flask import Flask, g, jsonify, Response, request
 
 from more_utils import create_sentencizer, create_wikipedia_context_fetcher
-from train import SPECIAL_TOKENS, MODELS, build_input_from_segments
+from train import MODELS, build_input_from_segments, MARKER_BACKGROUND, MARKER_SPEAKER1, MARKER_SPEAKER2
 from utils import get_dataset_personalities, download_pretrained_model
 
 endpoint = Flask(__name__, static_url_path='')
@@ -71,16 +71,16 @@ def sample_sequence(context, history, tokenizer, model, args, current_output=Non
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    speaker0 = tokenizer.special_tokens['<speaker0>']
-    speaker1 = tokenizer.special_tokens['<speaker1>']
-    speaker2 = tokenizer.special_tokens['<speaker2>']
+    background = tokenizer.special_tokens[MARKER_BACKGROUND]
+    speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1]
+    speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2]
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
         current_output = []
     for i in range(args.max_length):
         # TODO: adapt changes of build_input_from_segments (expects list of tuples: context and history. Check that!)
-        instance, sequence = build_input_from_segments(context=[(speaker0, context)],
+        instance, sequence = build_input_from_segments(context=[(background, context)],
                                                        history=[(speaker2 if (len(history) - i) % 2 else speaker1, h) for i, h in enumerate(history)],
                                                        reply=(speaker1, current_output), tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
