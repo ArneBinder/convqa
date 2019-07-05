@@ -111,15 +111,61 @@ def create_instance_from_coqa(record, stats, sentencizer=None, max_sentences_qa=
             was_truncated = True
             continue
 
-        #history.append(question_text)
-        #utterance['history'] = history.copy()
         all_answers.append(answer_text)
         all_questions.append(question_text)
-        #instance['utterances'].append(utterance)
-        #history.append(answer_text)
         instance['n_utterances'] += 1
 
     return instance, all_questions, all_answers, was_truncated
+
+
+def create_instance_from_squad(record, stats, sentencizer=None, max_sentences_qa=1, max_sentences_background=None):
+    all_questions = []
+    all_answers = []
+
+    was_truncated = False
+    instance = {}
+    instance['background'] = record['context']
+    if max_sentences_background is not None:
+        if 'background' not in stats:
+            stats['background'] = {'n_sents': Counter()}
+        stats['background']['n_sents'][len(instance['background'])] += 1
+        if len(instance['background']) > max_sentences_background:
+            was_truncated = True
+        instance['background'] = instance['background'][:max_sentences_background]
+
+    instance['n_utterances'] = 0
+    for qa in record['qas']:
+        question_text = qa['question']
+        if qa['is_impossible']:
+            answer_text = 'unknown'
+        else:
+            allowed_answers = [a['text'] for a in qa['answers']]
+            answer_text = max(allowed_answers, key=len)
+
+        # skip answer-question pairs if number of sentences in one of them > max_sentences
+        continue_this = False
+        if sentencizer is not None:
+            if 'question' not in stats:
+                stats['question'] = {'n_sents': Counter()}
+            if max_sentences_qa and count_sentences(s=question_text, sentencizer=sentencizer,
+                                                    counter=stats['question']['n_sents']) > max_sentences_qa:
+                continue_this = True
+            if 'answer' not in stats:
+                stats['answer'] = {'n_sents': Counter()}
+            if max_sentences_qa and count_sentences(s=answer_text, sentencizer=sentencizer,
+                                                    counter=stats['answer']['n_sents']) > max_sentences_qa:
+                continue_this = True
+        if continue_this:
+            was_truncated = True
+            continue
+
+        all_answers.append(answer_text)
+        all_questions.append(question_text)
+        instance['n_utterances'] += 1
+
+    return instance, all_questions, all_answers, was_truncated
+
+
 
 def dataset_split_to_dialog(data, instance_builder=create_instance_from_coqa, n_candidates=20,
                             create_question_utterances=False, **instance_builder_kargs
@@ -138,17 +184,19 @@ def dataset_split_to_dialog(data, instance_builder=create_instance_from_coqa, n_
         instances.append(instance)
         all_questions.extend(current_questions)
         all_answers.extend(current_answers)
-    logger.info('data created (skipped %i out of %i)' % (n_skipped, len(data)))
+    logger.info('data created (skipped %i out of %i)' % (n_skipped, len(instances) + n_skipped))
     #logger.info('max_sentences_background: %s' % str(max_sentences_background))
     #logger.info('max_sentences_qa: %s' % str(max_sentences_qa))
     logger.info(stats)
 
+    logger.info('sample negative answers...')
     sampled_neg_answers = sample_neg_candidates(instances=all_answers, n_candidates=n_candidates)
     sampled_neg_questions = None
     if create_question_utterances:
+        logger.info('sample negative questions...')
         sampled_neg_questions = sample_neg_candidates(instances=all_questions, n_candidates=n_candidates)
 
-    logger.info('neg samples created')
+    logger.info('negative samples created')
     #all_candidates = np.concatenate([sampled_neg_answers.T, [all_answers]]).T
 
     i = 0
@@ -180,6 +228,7 @@ def convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/CoQA',
                       out=None,
                       n_candidates=20,
                       create_question_utterances=False,
+                      data_loader=lambda file_name: json.load(open(file_name))['data'],
                       instance_builder=create_instance_from_coqa,
                       **instance_builder_kwargs
                       ):
@@ -199,18 +248,18 @@ def convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/CoQA',
 
 
     converted = {}
-    #print('convert dev...')
-    dev = json.load(open(dev))['data']
-    converted['valid'] = dataset_split_to_dialog(data=dev, n_candidates=n_candidates, instance_builder=instance_builder,
+    logger.info('convert dev...')
+    data_dev = list(data_loader(dev))
+    converted['valid'] = dataset_split_to_dialog(data=data_dev, n_candidates=n_candidates, instance_builder=instance_builder,
                                                  create_question_utterances=False, **instance_builder_kwargs)
     if create_question_utterances:
-        converted['valid_questionutterances'] = dataset_split_to_dialog(data=dev, n_candidates=n_candidates,
+        converted['valid_questionutterances'] = dataset_split_to_dialog(data=data_dev, n_candidates=n_candidates,
                                                                         instance_builder=instance_builder,
                                                                         create_question_utterances=True,
                                                                         **instance_builder_kwargs)
     logger.info('convert train...')
-    train = json.load(open(train))['data']
-    converted['train'] = dataset_split_to_dialog(data=train, n_candidates=n_candidates, instance_builder=instance_builder,
+    data_train = data_loader(train)
+    converted['train'] = dataset_split_to_dialog(data=data_train, n_candidates=n_candidates, instance_builder=instance_builder,
                                                  create_question_utterances=create_question_utterances,
                                                  **instance_builder_kwargs)
 
@@ -277,12 +326,31 @@ def convert_coqa(create_question_utterances=True, max_sentences_qa=1, sentencize
 
 
 
+def convert_squad(create_question_utterances=True, max_sentences_qa=1, sentencizer=create_sentencizer()):
+    # convert SQaAD to conversational QA format
+    def squad_data_loader(fn):
+        data = json.load(open(fn))
+        for article in data['data']:
+            for paragraph in article['paragraphs']:
+                yield paragraph
+
+    return convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/SQaAD',
+                             dev='dev-v2.0.json',
+                             train='train-v2.0.json',
+                             out=None,
+                             data_loader=squad_data_loader,
+                             instance_builder=create_instance_from_squad, max_sentences_qa=max_sentences_qa,
+                             create_question_utterances=create_question_utterances, sentencizer=sentencizer)
+    # stats: train: 7199; valid: 500
+
+
+
 if __name__ == '__main__':
     #stats: train: 17878; valid: 1000
     #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
-    out_fn = convert_coqa()
-
+    #out_fn = convert_coqa()
+    out_fn = convert_squad()
 
     gen_dataset_extract(fn=out_fn, extract_size=10, start_idx=0)
     #x = dummy_tokenize()
