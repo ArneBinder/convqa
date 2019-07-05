@@ -2,6 +2,7 @@ import bz2
 import json
 import logging
 import os
+import random
 import tarfile
 from collections import Counter
 
@@ -31,31 +32,52 @@ def sample_neg_indices_old(n_instances, n_candidates):
     return a[:, :n_candidates]
 
 
-def sample_neg_candidates(instances, n_candidates, n_resample=3):
+def sample_neg_candidates(instances, n_candidates):
     if not isinstance(instances, np.ndarray):
         instances = np.array(instances)
+    #counts = Counter(instances)
+    #frequencies = np.empty(len(counts), dtype=float)
+    #unique = np.empty(len(counts), dtype=str)
+    #indices = {}
+    #for i, s in enumerate(counts):
+    #    frequencies[i] = counts[s]
+    #    indices[s] = i
+    #    #unique[i] = s
+    #u = np.array(list(counts.keys()), dtype=str)
+    logger.debug('number  of instances: %i' % len(instances))
+    u, c = np.unique(instances, return_counts=True)
+    indices = {s: i for i, s in enumerate(u)}
+    #unique = list(counts.keys())
+    logger.info('collected %i unique instances' % len(u))
 
     n_collisions = 0
     nn_collisions = 0
+    collision_log = []
 
-    a = np.empty(shape=(len(instances), n_candidates - 1), dtype=instances.dtype)
-    for i, inst in enumerate(instances):
-        i_sample = 0
-        a[i] = np.random.choice(instances,  n_candidates - 1)
+    #a = np.empty(shape=(len(instances), n_candidates - 1), dtype=str)
+    a = []
+    for i, instance in tqdm(enumerate(instances), total=len(instances)):
 
-        # check for collisions with correct instance
-        # NOTE: we do not normalize the case (e.g. of the first character)!
-        collision_indices = np.nonzero(a[i] == inst)[0]
-        while len(collision_indices) > 0 and i_sample < n_resample:
-            new_samples = np.random.choice(instances,  len(collision_indices))
-            a[i][collision_indices] = new_samples
-            collision_indices = np.nonzero(a[i] == inst)[0]
-            i_sample += 1
-        if len(collision_indices) > 0:
+        idx = indices[instance]
+        current_count = c[idx]
+        c[idx] = 0.0
+        a.append(np.random.choice(u,  n_candidates - 1, p=c / (len(instances)-current_count)))
+        c[idx] = current_count
+        assert u[idx] == instance, 'mismatch'
+
+        # much slower
+        #mask = instances != instance
+        #a[i] = np.random.choice(instances[mask], n_candidates - 1)
+
+        if instance in a[i]:
             nn_collisions += 1
+            collision_indices = np.nonzero(a[i] == instance)[0]
             n_collisions += len(collision_indices)
+            collision_log.append('collision: %s is %i times in %s @%i' % (instance, len(collision_indices), str(a[i]), i))
 
     logger.info('collisions: %i (in %i instances; total: %i)' % (n_collisions, nn_collisions, len(instances)))
+    for e in collision_log:
+        logger.debug(e)
     return a
 
 def count_sentences(s, sentencizer, counter=None):
@@ -134,6 +156,8 @@ def create_instance_from_squad(record, stats, sentencizer=None, max_sentences_qa
         instance['background'] = instance['background'][:max_sentences_background]
 
     instance['n_utterances'] = 0
+    # shuffle because impossible questions tend to be at the end
+    random.shuffle(record['qas'])
     for qa in record['qas']:
         question_text = qa['question']
         if qa['is_impossible']:
@@ -326,7 +350,7 @@ def convert_coqa(create_question_utterances=True, max_sentences_qa=1, sentencize
 
 
 
-def convert_squad(create_question_utterances=True, max_sentences_qa=1, sentencizer=create_sentencizer()):
+def convert_squad(create_question_utterances=False, max_sentences_qa=1, sentencizer=create_sentencizer()):
     # convert SQaAD to conversational QA format
     def squad_data_loader(fn):
         data = json.load(open(fn))
