@@ -46,10 +46,11 @@ def get_dataset(tokenizer, dataset_path, dataset_cache=None, as_strings=False):
         logger.info("Tokenize and encode the dataset")
         def tokenize(obj):
             if isinstance(obj, str):
-                tokens = tokenizer.tokenize(obj)
+                # remove space before sentence marker and tokenize
+                tokens = tokenizer.tokenize(obj.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','))
                 if as_strings:
                     return tokens
-                tokenizer.convert_tokens_to_ids(tokens)
+                return tokenizer.convert_tokens_to_ids(tokens)
             if isinstance(obj, tuple) and len(obj) == 2 and isinstance(obj[0], str):
                 speaker, obj = obj
                 if as_strings:
