@@ -214,8 +214,8 @@ cmd_train `CUDA_VISIBLE_DEVICES=3 python ./train.py --model gpt2 --dataset_path 
 
 ## planned
  * train with different (QA) datasets:
-    * Persona-Chat (ConvAI2)
-    * SQaAD 2.0
+    * (converted) Persona-Chat (ConvAI2)
+    * (converted) SQaAD 2.0
     * ShARC
     * HotpotQA
     * QAngaroo
