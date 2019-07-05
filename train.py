@@ -108,7 +108,7 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
 
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache, as_strings=as_strings)
 
-        logger.info("Build inputs and labels for %s..." % os.path.basename(args.dataset_path))
+        logger.info("Build inputs and labels for %s..." % os.path.basename(dataset_path))
         for dataset_name in datasets.keys():
             dataset = loaded_dataset[dataset_name]
             n = 0
