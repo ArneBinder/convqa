@@ -70,7 +70,7 @@ def count_sentences(s, sentencizer, counter=None):
         counter[len(sents)] +=1
     return len(sents)
 
-def create_instance_from_coqa(record, sentencizer, max_sentences_qa, max_sentences_background, stats):
+def create_instance_from_coqa(record, stats, sentencizer=None, max_sentences_qa=1, max_sentences_background=None):
     all_questions = []
     all_answers = []
 
@@ -78,6 +78,8 @@ def create_instance_from_coqa(record, sentencizer, max_sentences_qa, max_sentenc
     instance = {}
     instance['background'] = record['story']
     if max_sentences_background is not None:
+        if 'background' not in stats:
+            stats['background'] = {'n_sents': Counter()}
         stats['background']['n_sents'][len(instance['background'])] += 1
         if len(instance['background']) > max_sentences_background:
             was_truncated = True
@@ -94,14 +96,17 @@ def create_instance_from_coqa(record, sentencizer, max_sentences_qa, max_sentenc
         answer_text = record['answers'][i]['input_text']
         # skip answer-question pairs if number of sentences in one of them > max_sentences
         continue_this = False
-        if max_sentences_qa and sentencizer is not None \
-                and count_sentences(s=question_text, sentencizer=sentencizer,  counter=stats['question']['n_sents']) \
-                > max_sentences_qa:
-            continue_this = True
-        if max_sentences_qa and sentencizer is not None \
-                and count_sentences(s=answer_text, sentencizer=sentencizer, counter=stats['answer']['n_sents']) \
-                > max_sentences_qa:
-            continue_this = True
+        if sentencizer is not None:
+            if 'question' not in stats:
+                stats['question'] = {'n_sents': Counter()}
+            if max_sentences_qa and count_sentences(s=question_text, sentencizer=sentencizer,
+                                                    counter=stats['question']['n_sents']) > max_sentences_qa:
+                continue_this = True
+            if 'answer' not in stats:
+                stats['answer'] = {'n_sents': Counter()}
+            if max_sentences_qa and count_sentences(s=answer_text, sentencizer=sentencizer,
+                                                    counter=stats['answer']['n_sents']) > max_sentences_qa:
+                continue_this = True
         if continue_this:
             was_truncated = True
             continue
@@ -116,26 +121,26 @@ def create_instance_from_coqa(record, sentencizer, max_sentences_qa, max_sentenc
 
     return instance, all_questions, all_answers, was_truncated
 
-def coqa_split_to_dialog(coqa_data, sentencizer=None, n_candidates=20, max_sentences_qa=1, max_sentences_background=None,
-                         create_question_utterances=False):
+def dataset_split_to_dialog(data, instance_builder=create_instance_from_coqa, n_candidates=20,
+                            create_question_utterances=False, **instance_builder_kargs
+                            ):
     instances = []
     all_answers = []
     all_questions = []
-    stats = {'background': {'n_sents': Counter()}, 'answer': {'n_sents': Counter()}, 'question': {'n_sents': Counter()}}
+    stats = {}
     n_skipped = 0
-    for record in coqa_data:
-        instance, current_questions, current_answers, was_truncated = create_instance_from_coqa(
-            record=record, sentencizer=sentencizer, max_sentences_qa=max_sentences_qa,
-            max_sentences_background=max_sentences_background, stats=stats)
+    for record in data:
+        instance, current_questions, current_answers, was_truncated = instance_builder(
+            record=record, stats=stats, **instance_builder_kargs)
         if was_truncated:
             n_skipped += 1
             continue
         instances.append(instance)
         all_questions.extend(current_questions)
         all_answers.extend(current_answers)
-    logger.info('data created (skipped %i out of %i)' % (n_skipped, len(coqa_data)))
-    logger.info('max_sentences_background: %s' % str(max_sentences_background))
-    logger.info('max_sentences_qa: %s' % str(max_sentences_qa))
+    logger.info('data created (skipped %i out of %i)' % (n_skipped, len(data)))
+    #logger.info('max_sentences_background: %s' % str(max_sentences_background))
+    #logger.info('max_sentences_qa: %s' % str(max_sentences_qa))
     logger.info(stats)
 
     sampled_neg_answers = sample_neg_candidates(instances=all_answers, n_candidates=n_candidates)
@@ -169,43 +174,45 @@ def coqa_split_to_dialog(coqa_data, sentencizer=None, n_candidates=20, max_sente
     return instances
 
 
-def coqa_to_dialog(dev='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-dev-v1.0.json',
-                   train='/mnt/DATA/ML/data/corpora/QA/CoQA/coqa-train-v1.0.json',
-                   out=None,
-                   n_candidates=20,
-                   max_sents_qa=1,
-                   max_sents_background=None,
-                   create_question_utterances=False):
+def convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/CoQA',
+                      dev='coqa-dev-v1.0.json',
+                      train='coqa-train-v1.0.json',
+                      out=None,
+                      n_candidates=20,
+                      create_question_utterances=False,
+                      instance_builder=create_instance_from_coqa,
+                      **instance_builder_kwargs
+                      ):
+    dev = os.path.join(dir, dev)
+    train = os.path.join(dir, train)
     if out is None:
-        fn = '%s_converted_dialog' % os.path.dirname(train).lower()
-        if max_sents_qa and max_sents_qa >= 0:
-            fn += '_sentsqa%i' % max_sents_qa
-        if max_sents_background and max_sents_background >= 0:
-            fn += '_sentsp%i' % max_sents_background
+        dataset_name = os.path.basename(dir) or os.path.basename(os.path.dirname(dir))
+        fn = '%s_converted_dialog' % dataset_name.lower()
+        if instance_builder_kwargs.get('max_sentences_qa', -1) >= 0:
+            fn += '_sentsqa%i' % instance_builder_kwargs['max_sentences_qa']
+        if instance_builder_kwargs.get('max_sentences_background', -1) >= 0:
+            fn += '_sentsb%i' % instance_builder_kwargs['max_sentences_background']
         if create_question_utterances:
             fn += '_questionutterances'
 
-        out = os.path.join(os.path.dirname(train), '%s.json' % fn)
+        out = os.path.join(dir, '%s.json' % fn)
 
-    sentencizer = create_sentencizer()
+
     converted = {}
     #print('convert dev...')
     dev = json.load(open(dev))['data']
-    converted['valid'] = coqa_split_to_dialog(coqa_data=dev, sentencizer=sentencizer,
-                                              n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                              max_sentences_background=max_sents_background,
-                                              create_question_utterances=False)
+    converted['valid'] = dataset_split_to_dialog(data=dev, n_candidates=n_candidates, instance_builder=instance_builder,
+                                                 create_question_utterances=False, **instance_builder_kwargs)
     if create_question_utterances:
-        converted['valid_questionutterances'] = coqa_split_to_dialog(coqa_data=dev, sentencizer=sentencizer,
-                                                                     n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                                                     max_sentences_background=max_sents_background,
-                                                                     create_question_utterances=True)
+        converted['valid_questionutterances'] = dataset_split_to_dialog(data=dev, n_candidates=n_candidates,
+                                                                        instance_builder=instance_builder,
+                                                                        create_question_utterances=True,
+                                                                        **instance_builder_kwargs)
     logger.info('convert train...')
     train = json.load(open(train))['data']
-    converted['train'] = coqa_split_to_dialog(coqa_data=train, sentencizer=sentencizer,
-                                              n_candidates=n_candidates, max_sentences_qa=max_sents_qa,
-                                              max_sentences_background=max_sents_background,
-                                              create_question_utterances=create_question_utterances)
+    converted['train'] = dataset_split_to_dialog(data=train, n_candidates=n_candidates, instance_builder=instance_builder,
+                                                 create_question_utterances=create_question_utterances,
+                                                 **instance_builder_kwargs)
 
     logger.info('dump to json: %s ...' % out)
     json.dump(converted, open(out, 'w'), indent=2)
@@ -258,15 +265,26 @@ def dummy_tokenize():
     return tokenized_text
 
 
+def convert_coqa(create_question_utterances=True, max_sentences_qa=1, sentencizer=create_sentencizer()):
+    # convert CoQA to conversational QA format
+    return convert_to_dialog(dir='/mnt/DATA/ML/data/corpora/QA/CoQA',
+                             dev='coqa-dev-v1.0.json',
+                             train='coqa-train-v1.0.json',
+                             out=None,
+                             instance_builder=create_instance_from_coqa, max_sentences_qa=max_sentences_qa,
+                             create_question_utterances=create_question_utterances, sentencizer=sentencizer)
+    # stats: train: 7199; valid: 500
+
+
+
 if __name__ == '__main__':
     #stats: train: 17878; valid: 1000
     #gen_personachat_extract(fn='/mnt/DATA/ML/data/corpora/dialog/personachat_self_original.json', extract_size=10)
 
-    # convert CoQA to conversational QA format
-    out_fn = coqa_to_dialog(max_sents_background=None, create_question_utterances=True)
-    # stats: train: 7199; valid: 500
-    gen_dataset_extract(fn=out_fn, extract_size=10, start_idx=0)
+    out_fn = convert_coqa()
 
+
+    gen_dataset_extract(fn=out_fn, extract_size=10, start_idx=0)
     #x = dummy_tokenize()
 
     logger.info('done')
