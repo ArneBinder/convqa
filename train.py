@@ -248,8 +248,15 @@ def train():
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
     model = model_class.from_pretrained(args.model_checkpoint)
     dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
-    tokenizer.set_special_tokens(SPECIAL_TOKENS + dataset_ids)
-    model.set_num_special_tokens(len(tokenizer.special_tokens))
+    if len(tokenizer.special_tokens) > 0:
+        for st in SPECIAL_TOKENS + dataset_ids:
+            # TODO: implement merging (or just overwrite?)
+            assert st in tokenizer.special_tokens, \
+                'loaded tokenizer already has special tokens (%s), but does not contain required token "%s"' \
+                % (str(tokenizer.special_tokens), st)
+    else:
+        tokenizer.set_special_tokens(SPECIAL_TOKENS + dataset_ids)
+        model.set_num_special_tokens(len(tokenizer.special_tokens))
     model.to(args.device)
     optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
     model_config = model.config
