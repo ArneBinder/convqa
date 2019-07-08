@@ -6,20 +6,24 @@ import ast
 import json
 import logging
 import os
+import pickle
 import random
+import re
 import sys
 import time
 import traceback
 from argparse import ArgumentParser
 from itertools import chain
 from pprint import pformat
+
+import requests
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 from flask import Flask, jsonify, Response, request
 
 from train import MODELS, build_input_from_segments, MARKER_BACKGROUND, MARKER_SPEAKER1, MARKER_SPEAKER2
-from utils import get_dataset_personalities, download_pretrained_model, create_wikipedia_context_fetcher
+from utils import get_dataset_personalities, download_pretrained_model#, create_wikipedia_context_fetcher
 
 endpoint = Flask(__name__, static_url_path='')
 #cors = CORS(endpoint)
@@ -70,9 +74,10 @@ def sample_sequence(context, history, tokenizer, model, args, current_output=Non
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    background = tokenizer.special_tokens[MARKER_BACKGROUND]
     speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1]
     speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2]
+    # default to speaker2 if background is not present in model
+    background = tokenizer.special_tokens.get(MARKER_BACKGROUND, speaker2)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     if current_output is None:
@@ -336,6 +341,84 @@ def create_sentencizer(spacy_model='en_core_web_sm'):
             sents.extend([_sent.strip() for _sent in sent.text.split('\n\n') if _sent.strip() != ''])
         return sents
     return sentencizer
+
+
+def create_wikipedia_context_fetcher(wikipedia_file=None):
+    url_disambiguate = "http://cloud.science-miner.com/nerd/service/disambiguate"
+    wikipedia_data = None
+    if wikipedia_file:
+        logger.info('load wikipedia data from: %s...' % wikipedia_file)
+        try:
+            # expects a pickel file containing a dict: wikipedia cuid -> {'text': [['This is a sentence.'], ['This is another sentence.']]}
+            wikipedia_data = pickle.load(open(wikipedia_file, "rb"))
+            logger.info('loaded %i articles' % len(wikipedia_data))
+        except:
+            logger.error('could not load wikipedia dump: %s' % wikipedia_file)
+    url_fetch = "http://cloud.science-miner.com/nerd/service/kb/concept"
+    headers = {
+        'Cache-Control': 'no-cache',
+    }
+
+    wikipedia_base_uri = "https://en.wikipedia.org/wiki?curid="
+
+
+    def _context_fetcher(s, previous_context=None):
+        logger.info('fetch context for "%s"...' % s)
+        res = previous_context or {}
+        query = {'text': s, "language": {"lang": "en"}}
+        files = {'query': (None, json.dumps(query))}
+        response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
+        response_data = json.loads(response.text)
+        if len(response_data.get('entities', [])) > 0:
+            for entity in response_data['entities']:
+                if 'wikipediaExternalRef' not in entity:
+                    logger.warning('entity "%s" (selection confidence: %s; disambiguation confidence: %s) has no wikipediaExternalRef. Skip it.'
+                                   % (entity['rawName'], entity['nerd_selection_score'], entity['nerd_score']))
+                    continue
+                wikipedia_entity_uri = wikipedia_base_uri + str(entity['wikipediaExternalRef'])
+                logger.debug('found "%s" (%s) with selection confidence of %s and disambiguation confidence of %s'
+                             % (entity['rawName'], wikipedia_entity_uri, entity['nerd_selection_score'], entity['nerd_score']))
+                # fetch only not already available context
+                if wikipedia_entity_uri not in res:
+                    logger.info('fetch entity data for "%s"...' % entity['rawName'])
+                    wikipedia_id = entity['wikipediaExternalRef']
+                    if wikipedia_data is not None:
+                        # NOTE: keys in wikipedia_data may be strings!
+                        wikipedia_entry = wikipedia_data.get(wikipedia_id, wikipedia_data.get(str(wikipedia_id), None))
+                        if wikipedia_entry is not None:
+                            logger.info('found entry for cuid=%i in wikipedia dump' % wikipedia_id)
+                            if isinstance(wikipedia_entry['text'], list):
+                                res[wikipedia_entity_uri] = ' '.join([s.strip() for s in wikipedia_entry['text']])
+                            elif isinstance(wikipedia_entry['text'], str):
+                                res[wikipedia_entity_uri] = wikipedia_entry['text']
+                            else:
+                                raise NotImplementedError('wikidata entry for "%s" has unknown format (only list or str are allowed): %s'
+                                                          % (wikipedia_entity_uri, str(wikipedia_entry['text'])))
+                            continue
+                        else:
+                            logger.warning('cuid=%i not found in wikipedia dump. Fetch data from %s...' % (wikipedia_id, url_fetch))
+                    response_entity = requests.get('%s/%s?lang=en' % (url_fetch, wikipedia_id), timeout=120)
+                    if response_entity.status_code != requests.codes.ok:
+                        logger.warning('Failed to fetch data for "%s" (url: %s, http status code: %s). Skip it.'
+                                       % (wikipedia_entity_uri, response_entity.request.url, response_entity.status_code))
+                        continue
+                    response_entity_data = json.loads(response_entity.text)
+                    #res[wikipedia_entity_uri] = []
+                    res_current_entity = []
+                    #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
+                    for definition in response_entity_data['definitions']:
+                        if definition.get('lang', '') == 'en':
+                            definition_cleaned = definition['definition']
+                            # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
+                            definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
+                            definition_cleaned = definition_cleaned.replace("'''", '"')
+                            res_current_entity.append(definition_cleaned.strip())
+                    if len(res_current_entity) > 0:
+                        res[wikipedia_entity_uri] = ' '.join(res_current_entity)
+
+        assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data.get('entities', [])])
+        return res
+    return _context_fetcher
 
 
 if __name__ == "__main__":
