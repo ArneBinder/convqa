@@ -192,7 +192,7 @@ def ask():
             params['context'] = context_fetcher(' '.join(history + [user_input]), context)
 
         history.append(user_input)
-        context_encoded = [tokenizer.encode(article) for article in params['context'].values()]
+        context_encoded = tokenizer.encode(' '.join(params['context'].values()))
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
         with torch.no_grad():
             out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
