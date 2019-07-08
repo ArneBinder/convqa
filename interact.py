@@ -67,26 +67,32 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(context, history, tokenizer, model, args, current_output=None):
+def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), current_output=None):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1]
-    speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2]
+    marker_speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1]
+    marker_speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2]
     # default to speaker2 if background is not present in model
-    background = tokenizer.special_tokens.get(MARKER_BACKGROUND, speaker2)
+    marker_background = tokenizer.special_tokens.get(MARKER_BACKGROUND, marker_speaker2)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
+    context = []
+    if background is not None:
+        context.append((marker_background, background))
+    if personality is not None:
+        # TODO: training uses marker_speaker1 for personality. Is this correct?
+        context.append((marker_speaker1, personality))
     if current_output is None:
         current_output = []
+    _history = [(marker_speaker2 if (len(history) - i) % 2 else marker_speaker1, h) for i, h in enumerate(history)]
     for i in range(args.max_length):
-        # TODO: adapt changes of build_input_from_segments (expects list of tuples: context and history. Check that!)
-        instance, sequence = build_input_from_segments(context=[(background, context)],
-                                                       history=[(speaker2 if (len(history) - i) % 2 else speaker1, h) for i, h in enumerate(history)],
-                                                       reply=(speaker1, current_output), tokenizer=tokenizer, eos=None,
+        instance, sequence = build_input_from_segments(context=context,
+                                                       history=_history,
+                                                       reply=(marker_speaker1, current_output), tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
@@ -176,27 +182,36 @@ def ask():
         logging.info('prediction requested')
         params = get_params()
         logger.debug(json.dumps(params, indent=2))
-
         history = params.get('history', [])
         user_input = params['user_input']
+        history.append(user_input)
 
         # create required format of context: dict with entry_id -> list of sentences (strings)
-        if isinstance(params.get('context', None), str):
-            params['context'] = {'user': params['context']}
+        if isinstance(params.get('background', None), str):
+            params['background'] = {'user': params['background']}
+        background = params.get('background', None)
+        if background is None or not params.get('dont_refetch', False):
+            assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
+            try:
+                background = context_fetcher(' '.join(history), previous_context=background)
+            except AssertionError as e:
+                logger.warning(e)
+                pass
 
-        context = params.get('context', None)
-        if context is None:
-            assert context_fetcher is not None, 'No context fetcher initialized (requires a spacy model). Please provide a context with every request.'
-            params['context'] = context_fetcher(' '.join(history + [user_input]))
-        elif context_fetcher is not None and not params.get('dont_refetch', False):
-            params['context'] = context_fetcher(' '.join(history + [user_input]), context)
+        background_encoded = None
+        if background is not None:
+            background_encoded = tokenizer.encode(' '.join(background.values()))
+            params['background'] = background
 
-        history.append(user_input)
-        context_encoded = tokenizer.encode(' '.join(params['context'].values()))
+        personality_encoded = None
+        if 'personality' in params:
+            personality_encoded = tokenizer.encode(params['personality'])
+
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
+
         with torch.no_grad():
-            out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
-                                      model=model, args=args)
+            out_ids = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                      history=history_encoded, tokenizer=tokenizer, model=model, args=args)
         history_encoded.append(out_ids)
         history_encoded = history_encoded[-(2 * args.max_history + 1):]
         params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
@@ -280,8 +295,8 @@ def run(tokenizer, model, args):
         n_errors = 0
         n_total = 0
         for instance in tqdm(data['data']):
-            context_sents = sentencizer(instance['story'])
-            context_encoded = [tokenizer.encode(sentence) for sentence in context_sents]
+            background_sents = sentencizer(instance['story'])
+            background_encoded = tokenizer.encode(' '.join([sentence.strip() for sentence in background_sents]))
             history_encoded = []
             for question in instance['questions']:
                 n_total += 1
@@ -289,7 +304,7 @@ def run(tokenizer, model, args):
                 history_encoded.append(tokenizer.encode(question_text))
                 with torch.no_grad():
                     try:
-                        out_ids = sample_sequence(context=context_encoded, history=history_encoded, tokenizer=tokenizer,
+                        out_ids = sample_sequence(background=background_encoded, history=history_encoded, tokenizer=tokenizer,
                                                   model=model, args=args)
                         history_encoded.append(out_ids)
                         history_encoded = history_encoded[-(2 * args.max_history + 1):]
@@ -312,9 +327,9 @@ def run(tokenizer, model, args):
     else:
         logger.info("Sample a personality")
         personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
-        personality = random.choice(personalities)
+        personality = chain(*random.choice(personalities))
         history_encoded = []
-        logger.info("Selected personality: %s", tokenizer.decode(chain(*personality)))
+        logger.info("Selected personality: %s", tokenizer.decode(personality))
         while True:
             raw_text = input(">>> ")
             while not raw_text:
@@ -322,7 +337,7 @@ def run(tokenizer, model, args):
                 raw_text = input(">>> ")
             history_encoded.append(tokenizer.encode(raw_text))
             with torch.no_grad():
-                out_ids = sample_sequence(context=personality, history=history_encoded, tokenizer=tokenizer,
+                out_ids = sample_sequence(personality=personality, history=history_encoded, tokenizer=tokenizer,
                                           model=model, args=args)
             history_encoded.append(out_ids)
             history_encoded = history_encoded[-(2*args.max_history+1):]
