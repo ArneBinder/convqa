@@ -89,6 +89,7 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
     if current_output is None:
         current_output = []
     _history = [(marker_speaker2 if (len(history) - i) % 2 else marker_speaker1, h) for i, h in enumerate(history)]
+    eos = None
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(context=context,
                                                        history=_history,
@@ -114,10 +115,11 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                 prev = torch.multinomial(probs, num_samples=1)
 
         if prev.item() in special_tokens_ids:
+            eos = prev.item()
             break
         current_output.append(prev.item())
 
-    return current_output
+    return current_output, eos
 
 class InvalidUsage(Exception):
     status_code = 400
@@ -210,12 +212,13 @@ def ask():
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
 
         with torch.no_grad():
-            out_ids = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                      history=history_encoded, tokenizer=tokenizer, model=model, args=args)
+            out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                           history=history_encoded, tokenizer=tokenizer, model=model, args=args)
         history_encoded.append(out_ids)
         history_encoded = history_encoded[-(2 * args.max_history + 1):]
         params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
         params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+        params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
         logger.debug('predicted:\n%s' % params['prediction'])
 
         return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
@@ -304,7 +307,7 @@ def run(tokenizer, model, args):
                 history_encoded.append(tokenizer.encode(question_text))
                 with torch.no_grad():
                     try:
-                        out_ids = sample_sequence(background=background_encoded, history=history_encoded, tokenizer=tokenizer,
+                        out_ids, _ = sample_sequence(background=background_encoded, history=history_encoded, tokenizer=tokenizer,
                                                   model=model, args=args)
                         history_encoded.append(out_ids)
                         history_encoded = history_encoded[-(2 * args.max_history + 1):]
@@ -337,7 +340,7 @@ def run(tokenizer, model, args):
                 raw_text = input(">>> ")
             history_encoded.append(tokenizer.encode(raw_text))
             with torch.no_grad():
-                out_ids = sample_sequence(personality=personality, history=history_encoded, tokenizer=tokenizer,
+                out_ids, _ = sample_sequence(personality=personality, history=history_encoded, tokenizer=tokenizer,
                                           model=model, args=args)
             history_encoded.append(out_ids)
             history_encoded = history_encoded[-(2*args.max_history+1):]
