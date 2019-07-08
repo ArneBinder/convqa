@@ -196,6 +196,12 @@ extract10 Validation: {'accuracy': 0.10232558139534884,
  'nll': 8.273027531490769}
 cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/personachat/personachat_self_original.json,/home/abinder/datasets/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
 checkpoints to: runs/Jul05_14-26-36_serv-9200
+Validation: {'accuracy': 0.7857329500914555,
+ 'average_accuracy': 0.7857329500914555,
+ 'average_nll': 1.9998672558003354,
+ 'average_ppl': 7.388075309691002,
+ 'nll': 1.9998672558003354}
+Time taken 02:31:00
 
 ### train SQuAD
 git branch: train_multipel_datasets
@@ -206,6 +212,13 @@ extract10 Validation: {'accuracy': 0.2033898305084746,
  'average_ppl': 1721416.9847927375,
  'nll': 14.358658337997177}
 cmd_train `CUDA_VISIBLE_DEVICES=3 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/SQuAD/squad_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train3.log`
+checkpoints to: runs/Jul05_18-44-03_serv-9200
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 28:46:01
+Epoch: [257076/257076] 100%|██████████, loss=7.90e-01 [28:46:00<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 01:55:30
+Validation: {'accuracy': 0.9344658101233078,
+ 'average_accuracy': 0.9344658101233078,
+ 'average_nll': 0.706292476237225,
+ 'average_ppl': 2.02646414981161,
 
 
 ## ideas
