@@ -3,6 +3,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 import ast
+import html
 import json
 import logging
 import os
@@ -67,7 +68,7 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), current_output=None):
+def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), current_output=None, explain=False):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
@@ -90,6 +91,8 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
         current_output = []
     _history = [(marker_speaker2 if (len(history) - i) % 2 else marker_speaker1, h) for i, h in enumerate(history)]
     eos = None
+    explanations = []
+    last_ids = None
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(context=context,
                                                        history=_history,
@@ -114,10 +117,29 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
             while prev.item() in special_tokens_ids:
                 prev = torch.multinomial(probs, num_samples=1)
 
+        if explain:
+            prev_prob = probs[prev]
+            prev_prob.backward()
+            model_wte = model.transformer.wte.weight
+            grads_input_ids = model_wte.grad[input_ids.squeeze()]
+            grads_token_type_ids = model_wte.grad[token_type_ids.squeeze()]
+            #
+            expl_input_ids = torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])
+            expl_token_type_ids = torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])
+            expl_vecs = torch.cat((expl_input_ids, expl_token_type_ids), dim=-1)
+            expl = expl_vecs.mean(dim=-1).detach().numpy()
+            last_ids = (instance["input_ids"], instance["token_type_ids"])
+            # TODO
+            #explanations.append((expl_input_ids.mean(dim=-1).detach().numpy(), expl_token_type_ids.mean(dim=-1).detach().numpy()))
+            explanations.append((expl,expl))
+
         if prev.item() in special_tokens_ids:
             eos = prev.item()
             break
         current_output.append(prev.item())
+
+    if explain:
+        return current_output, eos, last_ids, explanations
 
     return current_output, eos
 
@@ -177,6 +199,20 @@ def hello_world():
     return "Hello World!"
 
 
+def visualize_explanation(tokens, expl):
+    _min = min(expl)
+    _max = max(expl)
+    assert _min != _max, 'min==max==%f' % _min
+    expl_scaled = (expl - _min) / (_max - _min)
+    expl_scaled *= 256
+
+    html_res = ''
+    for i in range(len(expl_scaled)):
+        c = 256 - int(expl_scaled[i])
+        html_res += '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (c, c, html.escape(tokens[i]))
+    return html_res
+
+
 @endpoint.route("/ask", methods=['GET', 'POST'])
 def ask():
     try:
@@ -211,9 +247,27 @@ def ask():
 
         history_encoded = [tokenizer.encode(utterance) for utterance in history]
 
-        with torch.no_grad():
-            out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                           history=history_encoded, tokenizer=tokenizer, model=model, args=args)
+        if params.get('explain', False):
+
+            out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                                        history=history_encoded, tokenizer=tokenizer, model=model,
+                                                        args=args, explain=params.get('explain', False))
+            all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
+            all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
+            explanations_html = []
+            for explanation, token_explanation, type_explanation in explanations:
+                current_expl_html = '<div>%s</div>' % visualize_explanation(tokens=all_tokens, expl=explanation)
+                explanations_html.append(current_expl_html)
+
+            explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' % '\n'.join(explanations_html)
+            open('explanations.html', 'w').write(explanation_html)
+
+        else:
+            with torch.no_grad():
+                out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                               history=history_encoded, tokenizer=tokenizer, model=model, args=args,
+                                               explain=params.get('explain', False))
+
         history_encoded.append(out_ids)
         history_encoded = history_encoded[-(2 * args.max_history + 1):]
         params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
