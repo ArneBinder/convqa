@@ -127,8 +127,8 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. input_ids' % len(current_output))
             if torch.min(grads_token_type_ids) == torch.max(grads_token_type_ids) == 0.0:
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_token_type_ids' % len(current_output))
-            expl_input_ids = (torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])).mean(dim=-1)
-            expl_token_type_ids = (torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])).mean(dim=-1)
+            expl_input_ids = (torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])).sum(dim=-1)
+            expl_token_type_ids = (torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])).sum(dim=-1)
             last_ids = (instance["input_ids"], instance["token_type_ids"])
             explanations.append((expl_input_ids.detach().cpu().numpy(), expl_token_type_ids.cpu().detach().numpy()))
 
