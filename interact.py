@@ -199,10 +199,12 @@ def hello_world():
 
 
 def visualize_explanation(tokens, expl, special_tokens=()):
-    _min = min(expl)
+    #_min = min(expl)
     _max = max(expl)
-    assert _min != _max, 'explanation min==max==%f' % _min
-    expl_scaled = (expl - _min) / (_max - _min)
+    #assert _min != _max, 'explanation min==max==%f' % _min
+    assert _max != 0.0, 'explanation max==%f' % _max
+    #expl_scaled = (expl - _min) / (_max - _min)
+    expl_scaled = expl / _max
     expl_scaled *= 256
 
     html_res = []
