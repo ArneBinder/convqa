@@ -11,7 +11,8 @@
 #   git checkout attention
 #   pip install .
 #
-# Eventually, install Apex to speed up training (FP16, distributed, ...):
+# Eventually, install Apex to speed up training/lower resource consumption (FP16, distributed, ...),
+# e.g. "--fp16 O1" is required to train+evaluate gpt2@GPU \w 11GB memory:
 #   git clone https://github.com/NVIDIA/apex
 #   cd apex
 #   pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./

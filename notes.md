@@ -222,9 +222,18 @@ Validation: {'accuracy': 0.9344658101233078,
 
 
 ### train CoQA + personaCHAT + SQuAD
-@serv-9209 (has no Apex because wrong cuda version)
-TODO extract10 cmd_train `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path /home/binder/corpora/PersonaCHAT/personachat_self_original_extract10.json,/home/binder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json,/home/binder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda &> train0.log`
-TODO cmd_train `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path /home/binder/corpora/PersonaCHAT/personachat_self_original.json,/home/binder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/binder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda &> train0.log`
+@serv-9200
+git branch: bot_and_user_types
+extract10 cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/corpora/PersonaCHAT/personachat_self_original_extract10.json,/home/abinder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json,/home/abinder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1  &> train2.log`
+checkpoints to: runs/Jul10_21-25-57_serv-9200
+checkpoints to: runs/Jul10_21-30-09_serv-9200
+Validation: {'accuracy': 0.06569343065693431,
+ 'average_accuracy': 0.06569343065693431,
+ 'average_nll': 4.694358315128479,
+ 'average_ppl': 109.32863159952612,
+ 'nll': 4.694358315128479}
+(running) cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/corpora/PersonaCHAT/personachat_self_original.json,/home/abinder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/abinder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1  &> train2.log`
+
 
 
 ## ideas
