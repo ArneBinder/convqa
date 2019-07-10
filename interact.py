@@ -123,15 +123,14 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
             model_wte = model.transformer.wte.weight
             grads_input_ids = model_wte.grad[input_ids.squeeze()]
             grads_token_type_ids = model_wte.grad[token_type_ids.squeeze()]
-            #
+            if torch.min(grads_input_ids) == torch.max(grads_input_ids) == 0.0:
+                logger.warning('create explanations: min==max==0.0 for gradients wrt. input_ids')
+            if torch.min(grads_token_type_ids) == torch.max(grads_token_type_ids) == 0.0:
+                logger.warning('create explanations: min==max==0.0 for gradients wrt. grads_token_type_ids')
             expl_input_ids = torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])
             expl_token_type_ids = torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])
-            expl_vecs = torch.cat((expl_input_ids, expl_token_type_ids), dim=-1)
-            expl = expl_vecs.mean(dim=-1).detach().numpy()
             last_ids = (instance["input_ids"], instance["token_type_ids"])
-            # TODO
-            #explanations.append((expl_input_ids.mean(dim=-1).detach().numpy(), expl_token_type_ids.mean(dim=-1).detach().numpy()))
-            explanations.append((expl,expl))
+            explanations.append((expl_input_ids.mean(dim=-1).detach().numpy(), expl_token_type_ids.mean(dim=-1).detach().numpy()))
 
         if prev.item() in special_tokens_ids:
             eos = prev.item()
@@ -202,7 +201,10 @@ def hello_world():
 def visualize_explanation(tokens, expl):
     _min = min(expl)
     _max = max(expl)
-    assert _min != _max, 'min==max==%f' % _min
+    #assert _min != _max, 'min==max==%f' % _min
+    if _min == _max:
+        logger.warning('min==max==%f' % _min)
+        return None
     expl_scaled = (expl - _min) / (_max - _min)
     expl_scaled *= 256
 
@@ -211,6 +213,50 @@ def visualize_explanation(tokens, expl):
         c = 256 - int(expl_scaled[i])
         html_res += '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (c, c, html.escape(tokens[i]))
     return html_res
+
+
+def process_explanations(explanations, last_ids):
+    all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
+    all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
+    token_explanations_html = []
+    type_explanations_html = []
+    explanations_html = []
+    token_explanation_sum = None
+    type_explanation_sum = None
+    for token_explanation, type_explanation in explanations:
+        if token_explanation_sum is None:
+            token_explanation_sum = token_explanation
+        else:
+            token_explanation_sum = token_explanation_sum + token_explanation[:len(token_explanation_sum)]
+        if type_explanation_sum is None:
+            type_explanation_sum = type_explanation
+        else:
+            type_explanation_sum = type_explanation_sum + type_explanation[:len(type_explanation_sum)]
+        explanations_html.append(
+            '<div>%s</div>' % visualize_explanation(tokens=all_tokens, expl=token_explanation + type_explanation))
+        token_explanations_html.append(
+            '<div>%s</div>' % visualize_explanation(tokens=all_tokens, expl=token_explanation))
+        type_explanations_html.append('<div>%s</div>' % visualize_explanation(tokens=all_tokens, expl=type_explanation))
+
+    explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                       % '\n'.join(explanations_html)
+    open('explanations.html', 'w').write(explanation_html)
+    token_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                             % '\n'.join(token_explanations_html)
+    open('explanations_token.html', 'w').write(token_explanation_html)
+    type_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                            % '\n'.join(type_explanations_html)
+    open('explanations_type.html', 'w').write(type_explanation_html)
+
+    explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
+                       % visualize_explanation(tokens=all_tokens, expl=token_explanation_sum + type_explanation_sum)
+    open('explanations_sum.html', 'w').write(explanation_html)
+    token_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
+                             % visualize_explanation(tokens=all_tokens, expl=token_explanation_sum)
+    open('explanations_sum_token.html', 'w').write(token_explanation_html)
+    type_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
+                            % visualize_explanation(tokens=all_tokens, expl=type_explanation_sum)
+    open('explanations_sum_type.html', 'w').write(type_explanation_html)
 
 
 @endpoint.route("/ask", methods=['GET', 'POST'])
@@ -252,16 +298,7 @@ def ask():
             out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
                                                         history=history_encoded, tokenizer=tokenizer, model=model,
                                                         args=args, explain=params.get('explain', False))
-            all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
-            all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
-            explanations_html = []
-            for explanation, token_explanation, type_explanation in explanations:
-                current_expl_html = '<div>%s</div>' % visualize_explanation(tokens=all_tokens, expl=explanation)
-                explanations_html.append(current_expl_html)
-
-            explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' % '\n'.join(explanations_html)
-            open('explanations.html', 'w').write(explanation_html)
-
+            process_explanations(explanations=explanations, last_ids=last_ids)
         else:
             with torch.no_grad():
                 out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
