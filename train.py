@@ -21,12 +21,12 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 
 from utils import get_dataset
 
-MARKER_BOS = "<bos>"
-MARKER_BACKGROUND = "<background>"
-MARKER_SPEAKER1 = "<speaker1>"
-MARKER_SPEAKER2 = "<speaker2>"
-MARKER_PAD = "<pad>"
-SPECIAL_TOKENS = [MARKER_BOS, MARKER_BACKGROUND, MARKER_SPEAKER1, MARKER_SPEAKER2, MARKER_PAD]
+TYPE_BOS = "<bos>"
+TYPE_BACKGROUND = "<background>"
+TYPE_SPEAKER1 = "<speaker1>"
+TYPE_SPEAKER2 = "<speaker2>"
+TYPE_PAD = "<pad>"
+SPECIAL_TOKENS = [TYPE_BOS, TYPE_BACKGROUND, TYPE_SPEAKER1, TYPE_SPEAKER2, TYPE_PAD]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
@@ -62,7 +62,7 @@ def pad_dataset(dataset, padding=0):
 def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None,
                               return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
-    bos = tokenizer.special_tokens[MARKER_BOS] if not return_strings else MARKER_BOS
+    bos = tokenizer.special_tokens[TYPE_BOS] if not return_strings else TYPE_BOS
 
     instance = {}
     sequence = context + history + [reply]
@@ -96,9 +96,9 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
-    background = tokenizer.special_tokens[MARKER_BACKGROUND] if not as_strings else MARKER_BACKGROUND
-    speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1] if not as_strings else MARKER_SPEAKER1
-    speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2] if not as_strings else MARKER_SPEAKER2
+    type_background = tokenizer.special_tokens[TYPE_BACKGROUND] if not as_strings else TYPE_BACKGROUND
+    type_bot = tokenizer.special_tokens[TYPE_SPEAKER1] if not as_strings else TYPE_SPEAKER1
+    type_user = tokenizer.special_tokens[TYPE_SPEAKER2] if not as_strings else TYPE_SPEAKER2
 
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
@@ -121,13 +121,13 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                 context = []
                 if 'background' in dialog:
                     if not isinstance(dialog['background'], tuple):
-                        context.append((background, dialog['background']))
+                        context.append((type_background, dialog['background']))
                     else:
                         context.append(dialog['background'])
 
                 last_speaker = None
                 if 'personality' in dialog:
-                    context.append((speaker1, dialog['personality']))
+                    context.append((type_bot, dialog['personality']))
                 if len(context) > 0:
                     last_speaker = context[-1][0]
 
@@ -138,7 +138,8 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                     if len(utterance["history"]) > 0 and not isinstance(utterance["history"][0], tuple):
                         # add speakers (beginning with speaker2 because added personality was from speaker1)
                         for i, h in enumerate(utterance["history"]):
-                            last_speaker = speaker2 if last_speaker == speaker1 else speaker1
+                            # TODO: change this! if last_speaker is None (QA dataset), the current utterance comes from the user (question)
+                            last_speaker = type_user if last_speaker == type_bot else type_bot
                             utterance["history"][i] = (last_speaker, utterance["history"][i])
 
                     history = utterance["history"][-(2*args.max_history+1):]
@@ -147,7 +148,7 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         # add speaker, if necessary
                         if not isinstance(candidate, tuple):
-                            candidate_speaker = speaker2 if last_speaker == speaker1 else speaker1
+                            candidate_speaker = type_user if last_speaker == type_bot else type_bot
                             candidate = (candidate_speaker, candidate)
                         # predict next words only for correct candidate (the last one)
                         lm_labels = bool(j == num_candidates-1)
@@ -173,7 +174,7 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
-        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(MARKER_PAD))
+        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(TYPE_PAD))
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
             if input_name != "mc_labels":

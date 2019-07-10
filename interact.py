@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from flask import Flask, jsonify, Response, request
 
-from train import MODELS, build_input_from_segments, MARKER_BACKGROUND, MARKER_SPEAKER1, MARKER_SPEAKER2
+from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_SPEAKER1, TYPE_SPEAKER2
 from utils import get_dataset_personalities, download_pretrained_model#, create_wikipedia_context_fetcher
 
 endpoint = Flask(__name__, static_url_path='')
@@ -75,28 +75,28 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    marker_speaker1 = tokenizer.special_tokens[MARKER_SPEAKER1]
-    marker_speaker2 = tokenizer.special_tokens[MARKER_SPEAKER2]
+    type_bot = tokenizer.special_tokens[TYPE_SPEAKER1]
+    type_user = tokenizer.special_tokens[TYPE_SPEAKER2]
     # default to speaker2 if background is not present in model
-    marker_background = tokenizer.special_tokens.get(MARKER_BACKGROUND, marker_speaker2)
+    type_background = tokenizer.special_tokens.get(TYPE_BACKGROUND, type_user)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     context = []
     if background is not None:
-        context.append((marker_background, background))
+        context.append((type_background, background))
     if personality is not None:
-        # TODO: training uses marker_speaker1 for personality. Is this correct?
-        context.append((marker_speaker1, personality))
+        # TODO: training uses type_bot for personality. Is this correct?
+        context.append((type_bot, personality))
     if current_output is None:
         current_output = []
-    _history = [(marker_speaker2 if (len(history) - i) % 2 else marker_speaker1, h) for i, h in enumerate(history)]
+    _history = [(type_user if (len(history) - i) % 2 else type_bot, h) for i, h in enumerate(history)]
     eos = None
     explanations = []
     last_ids = None
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(context=context,
                                                        history=_history,
-                                                       reply=(marker_speaker1, current_output), tokenizer=tokenizer, eos=None,
+                                                       reply=(type_bot, current_output), tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
