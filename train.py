@@ -140,10 +140,10 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                 for utterance in dialog["utterances"]:
                     # add speakers to history, if necessary
                     if len(utterance["history"]) > 0 and not isinstance(utterance["history"][0], tuple):
-                        # add speakers (beginning with speaker2 because added personality was from speaker1)
+                        # beginning with user because added personality was from bot
+                        # note: iterate alternating over full history to be consistent
                         for i, h in enumerate(utterance["history"]):
-                            # TODO: change this! if last_speaker is None (QA dataset), the current utterance comes from the user (question)
-                            last_speaker = type_user if last_speaker == type_bot else type_bot
+                            last_speaker = type_bot if last_speaker == type_user else type_user
                             utterance["history"][i] = (last_speaker, utterance["history"][i])
 
                     history = utterance["history"][-(2*args.max_history+1):]
