@@ -23,7 +23,8 @@ import torch
 import torch.nn.functional as F
 from flask import Flask, jsonify, Response, request
 
-from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER
+from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_BOT_DEPRECATED, \
+    TYPE_USER_DEPRECATED
 from utils import get_dataset_personalities, download_pretrained_model#, create_wikipedia_context_fetcher
 
 endpoint = Flask(__name__, static_url_path='')
@@ -75,8 +76,8 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    type_bot = tokenizer.special_tokens[TYPE_BOT]
-    type_user = tokenizer.special_tokens[TYPE_USER]
+    type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
+    type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
     # default to speaker2 if background is not present in model
     type_background = tokenizer.special_tokens.get(TYPE_BACKGROUND, type_user)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'

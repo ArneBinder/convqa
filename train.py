@@ -25,6 +25,8 @@ TYPE_BOS = "<bos>"
 TYPE_BACKGROUND = "<background>"
 TYPE_BOT = "<bot>"
 TYPE_USER = "<user>"
+TYPE_BOT_DEPRECATED = "<speaker1>"
+TYPE_USER_DEPRECATED = "<speaker2>"
 TYPE_PAD = "<pad>"
 SPECIAL_TOKENS = [TYPE_BOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
@@ -97,8 +99,8 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
     type_background = tokenizer.special_tokens[TYPE_BACKGROUND] if not as_strings else TYPE_BACKGROUND
-    type_bot = tokenizer.special_tokens[TYPE_BOT] if not as_strings else TYPE_BOT
-    type_user = tokenizer.special_tokens[TYPE_USER] if not as_strings else TYPE_USER
+    type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
+    type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
 
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
