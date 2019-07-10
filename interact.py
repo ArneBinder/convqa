@@ -307,22 +307,29 @@ def ask():
                                                         history=history_encoded, tokenizer=tokenizer, model=model,
                                                         args=args, explain=params.get('explain', False))
             params['explanation'] = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
+            params['explanation'][-1]+= '<span style="background-color:grey">%s</span>' % tokenizer.decode(out_ids, skip_special_tokens=False)
+
+            resp_html = '\n'.join(['<div>%s</div>' % u for u in params['explanation']])
+            resp_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explained response</title>\n</head>\n<body>\n%s</body>\n</html>' % resp_html
+            return_type = 'text/html'
+            response = Response(resp_html, mimetype=return_type)
+            logger.info("Time spent handling the request: %f" % (time.time() - start))
         else:
             with torch.no_grad():
                 out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
                                                history=history_encoded, tokenizer=tokenizer, model=model, args=args,
                                                explain=params.get('explain', False))
 
-        history_encoded.append(out_ids)
-        history_encoded = history_encoded[-(2 * args.max_history + 1):]
-        params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
-        params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
-        params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
-        logger.debug('predicted:\n%s' % params['prediction'])
+            history_encoded.append(out_ids)
+            history_encoded = history_encoded[-(2 * args.max_history + 1):]
+            params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
+            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+            params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
+            logger.debug('predicted:\n%s' % params['prediction'])
 
-        return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
-        json_data = json.dumps(params)
-        response = Response(json_data, mimetype=return_type)
+            return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
+            json_data = json.dumps(params)
+            response = Response(json_data, mimetype=return_type)
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:
