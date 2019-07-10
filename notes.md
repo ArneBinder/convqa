@@ -187,7 +187,7 @@ Validation: {'accuracy': 0.854323780794369,
 
 
 ### train multi dataset (coqa + personachat)
-git branch: train_multipel_datasets
+git branch: train_multiple_datasets
 extract10 cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/personachat/personachat_self_original_extract10.json,/home/abinder/datasets/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train2.log`
 extract10 Validation: {'accuracy': 0.10232558139534884,
  'average_accuracy': 0.10232558139534884,
@@ -204,7 +204,7 @@ Validation: {'accuracy': 0.7857329500914555,
 Time taken 02:31:00
 
 ### train SQuAD
-git branch: train_multipel_datasets
+git branch: train_multiple_datasets
 extract10 cmd_train `CUDA_VISIBLE_DEVICES=3 python ./train.py --model gpt2 --dataset_path /home/abinder/datasets/SQuAD/squad_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1 &> train3.log`
 extract10 Validation: {'accuracy': 0.2033898305084746,
  'average_accuracy': 0.2033898305084746,
