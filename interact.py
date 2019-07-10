@@ -76,8 +76,11 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
     special_tokens_ids = tokenizer.special_tokens.values()
-    type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
-    type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
+    # causes strange behaviour:
+    #type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
+    #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
+    type_bot = tokenizer.special_tokens[TYPE_BOT]
+    type_user = tokenizer.special_tokens[TYPE_USER]
     # default to speaker2 if background is not present in model
     type_background = tokenizer.special_tokens.get(TYPE_BACKGROUND, type_user)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
@@ -86,7 +89,6 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
     if background is not None:
         context.append((type_background, background))
     if personality is not None:
-        # TODO: training uses type_bot for personality. Is this correct?
         context.append((type_bot, personality))
     if current_output is None:
         current_output = []

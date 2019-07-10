@@ -99,8 +99,11 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
     type_background = tokenizer.special_tokens[TYPE_BACKGROUND] if not as_strings else TYPE_BACKGROUND
-    type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
-    type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
+    # causes strange behaviour (at least in interact.py):
+    #type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
+    #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
+    type_bot = tokenizer.special_tokens[TYPE_BOT] if not as_strings else TYPE_BOT
+    type_user = tokenizer.special_tokens[TYPE_USER] if not as_strings else TYPE_USER
 
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
@@ -133,10 +136,9 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                 if len(context) > 0:
                     last_speaker = context[-1][0]
 
-                #persona1 = dialog.get("personality1", dialog.get("personality",[]))
-                #persona2 = dialog.get("personality2", [])
                 #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
+                    # add speakers to history, if necessary
                     if len(utterance["history"]) > 0 and not isinstance(utterance["history"][0], tuple):
                         # add speakers (beginning with speaker2 because added personality was from speaker1)
                         for i, h in enumerate(utterance["history"]):
