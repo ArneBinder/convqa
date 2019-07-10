@@ -1,0 +1,106 @@
+{
+	"info": {
+		"_postman_id": "01dab319-6f3d-46e4-82a1-bf0cc354edbc",
+		"name": "entity-fishing",
+		"description": "see https://github.com/kermitt2/entity-fishing",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "pope",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "multipart/form-data"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "query",
+							"value": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"sessionValue": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://cloud.science-miner.com/nerd/service/disambiguate?",
+					"protocol": "http",
+					"host": [
+						"cloud",
+						"science-miner",
+						"com"
+					],
+					"path": [
+						"nerd",
+						"service",
+						"disambiguate"
+					],
+					"query": [
+						{
+							"key": "query",
+							"value": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "pope entity",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "multipart/form-data"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "query",
+							"value": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"sessionValue": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://cloud.science-miner.com/nerd/service/kb/concept/23056?lang=en",
+					"protocol": "http",
+					"host": [
+						"cloud",
+						"science-miner",
+						"com"
+					],
+					"path": [
+						"nerd",
+						"service",
+						"kb",
+						"concept",
+						"23056"
+					],
+					"query": [
+						{
+							"key": "lang",
+							"value": "en"
+						},
+						{
+							"key": "query",
+							"value": "{\n    \"text\": \"Who is the pope?\",\n    \"shortText\": \"\",\n    \"termVector\": [],\n    \"language\": {\n        \"lang\": \"en\"\n    },\n    \"entities\": [],\n    \"mentions\": [\n        \"ner\",\n        \"wikipedia\"\n    ],\n    \"nbest\": false,\n    \"sentence\": false,\n    \"customisation\": \"generic\"\n}",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
