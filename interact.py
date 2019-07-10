@@ -127,10 +127,10 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. input_ids' % len(current_output))
             if torch.min(grads_token_type_ids) == torch.max(grads_token_type_ids) == 0.0:
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_token_type_ids' % len(current_output))
-            expl_input_ids = torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])
-            expl_token_type_ids = torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])
+            expl_input_ids = (torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])).mean(dim=-1)
+            expl_token_type_ids = (torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])).mean(dim=-1)
             last_ids = (instance["input_ids"], instance["token_type_ids"])
-            explanations.append((expl_input_ids.mean(dim=-1).detach().numpy(), expl_token_type_ids.mean(dim=-1).detach().numpy()))
+            explanations.append((expl_input_ids.detach().cpu().numpy(), expl_token_type_ids.cpu().detach().numpy()))
 
         if prev.item() in special_tokens_ids:
             eos = prev.item()
@@ -201,10 +201,7 @@ def hello_world():
 def visualize_explanation(tokens, expl, special_tokens=()):
     _min = min(expl)
     _max = max(expl)
-    #assert _min != _max, 'min==max==%f' % _min
-    if _min == _max:
-        logger.warning('min==max==%f' % _min)
-        return None
+    assert _min != _max, 'explanation min==max==%f' % _min
     expl_scaled = (expl - _min) / (_max - _min)
     expl_scaled *= 256
 
@@ -307,7 +304,8 @@ def ask():
                                                         history=history_encoded, tokenizer=tokenizer, model=model,
                                                         args=args, explain=params.get('explain', False))
             params['explanation'] = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
-            params['explanation'][-1]+= '<span style="background-color:grey">%s</span>' % tokenizer.decode(out_ids, skip_special_tokens=False)
+            params['explanation'][-1]+= '<span style="background-color:grey">%s</span>' \
+                                        % tokenizer.decode(out_ids, skip_special_tokens=False)
 
             resp_html = '\n'.join(['<div>%s</div>' % u for u in params['explanation']])
             resp_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explained response</title>\n</head>\n<body>\n%s</body>\n</html>' % resp_html
