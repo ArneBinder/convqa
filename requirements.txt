@@ -2,14 +2,21 @@
 #   conda create -n huggingface_playground python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl -c pytorch -c conda-forge
 # NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
 #
-# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install its branch "gpt-2-special-tokens" from my fork:
+# To use openai-gpt model, install spacy model for tokenization:
+#   python -m spacy download en
+#
+# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install its branch "attention":
 #   git clone https://github.com/huggingface/pytorch-pretrained-BERT.git
 #   cd pytorch-pretrained-BERT
 #   git checkout attention
 #   pip install .
 #
-# To allow sentence splitting in flask endpoint (see interact.py), install spacy model:
-#   python -m spacy download en_core_web_sm
+# Eventually, install Apex to speed up training (FP16, distributed, ...):
+#   git clone https://github.com/NVIDIA/apex
+#   cd apex
+#   pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
+#
+#########################################################################################
 
 
 torch

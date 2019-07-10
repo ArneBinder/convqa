@@ -221,6 +221,12 @@ Validation: {'accuracy': 0.9344658101233078,
  'average_ppl': 2.02646414981161,
 
 
+### train CoQA + personaCHAT + SQuAD
+@serv-9209 (has no Apex because wrong cuda version)
+TODO extract10 cmd_train `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path /home/binder/corpora/PersonaCHAT/personachat_self_original_extract10.json,/home/binder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json,/home/binder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda &> train0.log`
+TODO cmd_train `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path /home/binder/corpora/PersonaCHAT/personachat_self_original.json,/home/binder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/binder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda &> train0.log`
+
+
 ## ideas
  * improve context fetching:
     * set up own (entity-fishing) server
@@ -228,7 +234,7 @@ Validation: {'accuracy': 0.9344658101233078,
 ## planned
  * train with different (QA) datasets:
     * (converted) Persona-Chat (ConvAI2)
-    * (converted) SQaAD 2.0
+    * (converted) SQuAD 2.0
     * ShARC
     * HotpotQA
     * QAngaroo
