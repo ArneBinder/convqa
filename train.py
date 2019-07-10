@@ -23,10 +23,10 @@ from utils import get_dataset
 
 TYPE_BOS = "<bos>"
 TYPE_BACKGROUND = "<background>"
-TYPE_SPEAKER1 = "<speaker1>"
-TYPE_SPEAKER2 = "<speaker2>"
+TYPE_BOT = "<bot>"
+TYPE_USER = "<user>"
 TYPE_PAD = "<pad>"
-SPECIAL_TOKENS = [TYPE_BOS, TYPE_BACKGROUND, TYPE_SPEAKER1, TYPE_SPEAKER2, TYPE_PAD]
+SPECIAL_TOKENS = [TYPE_BOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
@@ -97,8 +97,8 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
     type_background = tokenizer.special_tokens[TYPE_BACKGROUND] if not as_strings else TYPE_BACKGROUND
-    type_bot = tokenizer.special_tokens[TYPE_SPEAKER1] if not as_strings else TYPE_SPEAKER1
-    type_user = tokenizer.special_tokens[TYPE_SPEAKER2] if not as_strings else TYPE_SPEAKER2
+    type_bot = tokenizer.special_tokens[TYPE_BOT] if not as_strings else TYPE_BOT
+    type_user = tokenizer.special_tokens[TYPE_USER] if not as_strings else TYPE_USER
 
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
