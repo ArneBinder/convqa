@@ -87,7 +87,10 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     context = []
     if background is not None:
-        context.append((type_background, background))
+        if isinstance(background, list):
+            context.extend([(type_background, b) for b in background])
+        else:
+            context.append((type_background, background))
     if personality is not None:
         context.append((type_bot, personality))
     if current_output is None:
@@ -294,7 +297,7 @@ def ask():
 
         background_encoded = None
         if background is not None:
-            background_encoded = tokenizer.encode(' '.join(background.values()))
+            background_encoded = [tokenizer.encode(b) for b in background.values()]
             params['background'] = background
 
         personality_encoded = None
