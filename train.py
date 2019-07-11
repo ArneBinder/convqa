@@ -94,25 +94,40 @@ def build_input_from_segments(context, history, reply, tokenizer, lm_labels=Fals
     return instance, sequence
 
 
-def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None):
+def create_typed_utterance(utt, default_type, allow_not_an_utterance=False):
+    # an utterance is a [list of ints], i.e. not typed words, or [int, [list of ints]], i.e. typed list of words
+    if isinstance(utt, list) and isinstance(utt[0], int):
+        # typed utterance
+        if len(utt) == 2 and isinstance(utt[1], list):
+            return utt
+        else:
+            return default_type, utt
+    # no utterance
+    if allow_not_an_utterance:
+        return None
+    raise AssertionError('could not create (typed) utterance from: %s and default_type: %s'
+                         % (str(utt), str(default_type)))
+
+
+def get_data_loaders(args, tokenizer, max_sequence_length=None):
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
-    type_background = tokenizer.special_tokens[TYPE_BACKGROUND] if not as_strings else TYPE_BACKGROUND
+    type_background = tokenizer.special_tokens[TYPE_BACKGROUND]
     # causes strange behaviour (at least in interact.py):
     #type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
     #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
-    type_bot = tokenizer.special_tokens[TYPE_BOT] if not as_strings else TYPE_BOT
-    type_user = tokenizer.special_tokens[TYPE_USER] if not as_strings else TYPE_USER
+    type_bot = tokenizer.special_tokens[TYPE_BOT]
+    type_user = tokenizer.special_tokens[TYPE_USER]
 
     for dataset_path in dataset_paths:
         dataset_id = '<%s>' % os.path.basename(dataset_path)
         assert dataset_id in tokenizer.special_tokens, \
             'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
             % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
-        dataset_id = tokenizer.special_tokens[dataset_id] if not as_strings else dataset_id
+        dataset_id = tokenizer.special_tokens[dataset_id]
 
-        loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache, as_strings=as_strings)
+        loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache)
 
         logger.info("Build inputs and labels for %s..." % os.path.basename(dataset_path))
         for dataset_name in datasets.keys():
@@ -125,10 +140,13 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
             for dialog in dataset:
                 context = []
                 if 'background' in dialog:
-                    if not isinstance(dialog['background'], tuple):
-                        context.append((type_background, dialog['background']))
+                    utt = create_typed_utterance(utt=dialog['background'], default_type=type_background, allow_not_an_utterance=True)
+                    if utt is not None:
+                        context.append(utt)
                     else:
-                        context.append(dialog['background'])
+                        # assume dialog['background'] is a list of backgrounds
+                        for b in dialog['background']:
+                            context.append(create_typed_utterance(utt=b, default_type=type_background))
 
                 last_speaker = None
                 if 'personality' in dialog:
@@ -139,26 +157,23 @@ def get_data_loaders(args, tokenizer, as_strings=False, max_sequence_length=None
                 #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
                     # add speakers to history, if necessary
-                    if len(utterance["history"]) > 0 and not isinstance(utterance["history"][0], tuple):
-                        # beginning with user because added personality was from bot
-                        # note: iterate alternating over full history to be consistent
-                        for i, h in enumerate(utterance["history"]):
-                            last_speaker = type_bot if last_speaker == type_user else type_user
-                            utterance["history"][i] = (last_speaker, utterance["history"][i])
+                    # beginning with user because added personality was from bot
+                    # note: iterate alternating over full history to be consistent
+                    for i, h in enumerate(utterance["history"]):
+                        last_speaker = type_bot if last_speaker == type_user else type_user
+                        utterance["history"][i] = create_typed_utterance(utt=utterance["history"][i], default_type=last_speaker)
 
                     history = utterance["history"][-(2*args.max_history+1):]
                     if len(history) > 0:
                         last_speaker = history[-1][0]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         # add speaker, if necessary
-                        if not isinstance(candidate, tuple):
-                            candidate_speaker = type_user if last_speaker == type_bot else type_bot
-                            candidate = (candidate_speaker, candidate)
+                        candidate_speaker = type_user if last_speaker == type_bot else type_bot
+                        candidate = create_typed_utterance(utt=candidate, default_type=candidate_speaker)
                         # predict next words only for correct candidate (the last one)
                         lm_labels = bool(j == num_candidates-1)
                         instance, sequence = build_input_from_segments(context, history, candidate,
                                                                        tokenizer, lm_labels,
-                                                                       return_strings=as_strings,
                                                                        max_sequence_length=max_sequence_length,
                                                                        eos=dataset_id)
                         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
@@ -282,7 +297,7 @@ def train():
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model_config.n_ctx)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer, #as_strings=True,
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer,
                                                                               max_sequence_length=max_sequence_length)
 
     # Training function and trainer
