@@ -188,8 +188,6 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
 
-    assert not as_strings, 'return_strings has to be False'
-
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
