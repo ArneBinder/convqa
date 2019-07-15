@@ -17,6 +17,7 @@ from argparse import ArgumentParser
 from itertools import chain
 from pprint import pformat
 
+import numpy as np
 import requests
 from tqdm import tqdm
 import torch
@@ -224,15 +225,7 @@ def hello_world():
 
 
 def visualize_explanation(tokens, expl, special_tokens=()):
-    #_min = min(expl)
-    _max = max(expl)
-    #assert _min != _max, 'explanation min==max==%f' % _min
-    #assert _max != 0.0, 'explanation max==%f' % _max
-    if _max == 0.0:
-        logger.warning('max explanation is 0.0')
-    else:
-        #expl_scaled = (expl - _min) / (_max - _min)
-        expl = expl / _max
+    expl = norm_expl(expl, _min=0.0)
     expl *= 256
 
     html_res = []
@@ -246,6 +239,17 @@ def visualize_explanation(tokens, expl, special_tokens=()):
     html_res.append(current_html_res)
     return html_res
 
+def norm_expl(expl, _min=None, square=False):
+    if square:
+        expl = expl * expl
+    if _min is None:
+        _min = np.min(expl)
+    _max = np.max(expl)
+    if _max != _min:
+        expl /= _max - _min
+    else:
+        logger.warning('explanation max==min==%f' % _max)
+    return expl
 
 def process_explanations(explanations, last_ids, tokenizer):
     all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
@@ -259,11 +263,11 @@ def process_explanations(explanations, last_ids, tokenizer):
         if token_explanation_sum is None:
             token_explanation_sum = token_explanation
         else:
-            token_explanation_sum = token_explanation_sum + token_explanation[:len(token_explanation_sum)]
+            token_explanation_sum = token_explanation_sum + norm_expl(token_explanation[:len(token_explanation_sum)], _min=0.0)
         if type_explanation_sum is None:
             type_explanation_sum = type_explanation
         else:
-            type_explanation_sum = type_explanation_sum + type_explanation[:len(type_explanation_sum)]
+            type_explanation_sum = type_explanation_sum + norm_expl(type_explanation[:len(token_explanation_sum)], _min=0.0)
         explanations_html.append(
             '<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=token_explanation + type_explanation)))
         token_explanations_html.append(
