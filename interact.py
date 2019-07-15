@@ -287,7 +287,7 @@ def ask():
         if isinstance(params.get('background', None), str):
             params['background'] = {'user': params['background']}
         background = params.get('background', None)
-        if background is None or not params.get('dont_refetch', False):
+        if not params.get('dont_fetch', False):
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
                 background = context_fetcher(' '.join(history), previous_context=background)
