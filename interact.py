@@ -107,6 +107,9 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
 
+        if torch.is_grad_enabled():
+            model.zero_grad()
+
         input_ids = torch.tensor(instance["input_ids"], device=args.device).unsqueeze(0)
         token_type_ids = torch.tensor(instance["token_type_ids"], device=args.device).unsqueeze(0)
 
@@ -114,19 +117,35 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
 
         if "gpt2" == args.model:
             logits = logits[0]
-        logits = logits[0, -1, :] / args.temperature
-        logits = top_filtering(logits, top_k=args.top_k, top_p=args.top_p)
+        logits_all = logits[0, -1, :] / args.temperature
+        logits = top_filtering(logits_all.clone(), top_k=args.top_k, top_p=args.top_p)
         probs = F.softmax(logits, dim=-1)
+
+        #logger.debug('nbr of non zeros in filtered probs_top: %i (of %i)' % (torch.nonzero(probs.data).size(0), len(probs)))
 
         prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
         if i < args.min_length and prev.item() in special_tokens_ids:
             while prev.item() in special_tokens_ids:
+                logger.debug('resample because of special token...')
                 prev = torch.multinomial(probs, num_samples=1)
 
+
         if explain:
-            prev_prob = probs[prev]
+            probs_all = F.softmax(logits_all, dim=-1)
+            #logger.debug('nbr of non zeros in filtered probs_all: %i (of %i)'
+            #             % (torch.nonzero(probs_all.data).size(0), len(probs)))
+            #logger.debug('probs_all min: %f, max: %f; logits_all min: %f, max %f'
+            #             % (torch.min(probs_all).item(), torch.max(probs_all).item(),
+            #                torch.min(probs_all).item(), torch.max(probs_all).item()))
+            #logger.debug('probs_top min: %f, max: %f; logits_top min: %f, max %f'
+            #             % (torch.min(probs).item(), torch.max(probs).item(),
+            #                torch.min(logits).item(), torch.max(logits).item()))
+            prev_prob = probs_all[prev]
+            logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
             prev_prob.backward()
             model_wte = model.transformer.wte.weight
+            if torch.min(model_wte.grad) == torch.max(model_wte.grad) == 0.0:
+                logger.warning('create explanations (i: %i): min==max==0.0 for ALL embedding gradients' % len(current_output))
             grads_input_ids = model_wte.grad[input_ids.squeeze()]
             grads_token_type_ids = model_wte.grad[token_type_ids.squeeze()]
             if torch.min(grads_input_ids) == torch.max(grads_input_ids) == 0.0:
@@ -208,18 +227,21 @@ def visualize_explanation(tokens, expl, special_tokens=()):
     #_min = min(expl)
     _max = max(expl)
     #assert _min != _max, 'explanation min==max==%f' % _min
-    assert _max != 0.0, 'explanation max==%f' % _max
-    #expl_scaled = (expl - _min) / (_max - _min)
-    expl_scaled = expl / _max
-    expl_scaled *= 256
+    #assert _max != 0.0, 'explanation max==%f' % _max
+    if _max == 0.0:
+        logger.warning('max explanation is 0.0')
+    else:
+        #expl_scaled = (expl - _min) / (_max - _min)
+        expl = expl / _max
+    expl *= 256
 
     html_res = []
     current_html_res = ''
-    for i in range(len(expl_scaled)):
+    for i in range(len(expl)):
         if tokens[i] in special_tokens and len(current_html_res) > 0:
             html_res.append(current_html_res)
             current_html_res = ''
-        c = 256 - int(expl_scaled[i])
+        c = 256 - int(expl[i])
         current_html_res += '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (c, c, html.escape(tokens[i]))
     html_res.append(current_html_res)
     return html_res
