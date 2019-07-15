@@ -9,6 +9,9 @@ from collections import defaultdict, Counter
 from itertools import chain
 
 import torch
+from torch import nn
+from torch.autograd import Function
+from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, TensorDataset
 from ignite.engine import Engine, Events
@@ -21,15 +24,148 @@ from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, Open
 
 from utils import get_dataset
 
+
+class GradReverse(Function):
+    @staticmethod
+    def forward(ctx, input):
+        return input.view_as(input)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.neg()
+
+def grad_reverse(x):
+    return GradReverse.apply(x)
+
+
+class GPT2ClassifierHead(nn.Module):
+    """ Classifier Head for the transformer """
+
+    def __init__(self, config, num_labels, invert_gradients=False):
+        super(GPT2ClassifierHead, self).__init__()
+        self.n_embd = config.n_embd
+        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
+        self.num_labels = num_labels
+        self.linear = nn.Linear(config.n_embd, self.num_labels)
+        self.invert_gradients = invert_gradients
+
+
+        nn.init.normal_(self.linear.weight, std=0.02)
+        nn.init.normal_(self.linear.bias, 0)
+
+    def forward(self, hidden_states, mc_token_ids):
+        # Classification logits
+        # hidden_state (bsz, num_choices, seq_length, hidden_size)
+        # mc_token_ids (bsz, num_choices)
+        mc_token_ids = mc_token_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, hidden_states.size(-1))
+        # (bsz, num_choices, 1, hidden_size)
+        classifier_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
+        # invert gradients
+        if self.invert_gradients:
+            classifier_h = grad_reverse(classifier_h)
+        # (bsz, num_choices, hidden_size)
+        classifier_h = self.dropout(classifier_h.transpose(1, 2)).transpose(1, 2)
+        classifier_logits = self.linear(classifier_h)
+        # (bsz, num_choices, num_labels)
+        return classifier_logits
+
+
+class GPT2DoubleHeadsModelwithAdversarial(GPT2DoubleHeadsModel):
+    """OpenAI GPT-2 model with a Language Modeling and a Multiple Choice head ("Language Models are Unsupervised Multitask Learners").
+
+        Params:
+            config: a GPT2Config class instance with the configuration to build a new model
+
+        Inputs:
+            `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length] with the BPE token
+                indices selected in the range [0, config.vocab_size[
+            `mc_token_ids`: a torch.LongTensor of shape [batch_size, num_choices] with the index of the token from
+                which we should take the hidden state to feed the multiple choice classifier (usually last token of the sequence)
+            `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+                with the position indices (selected in the range [0, config.n_positions - 1[.
+            `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+                You can use it to add a third type of embedding to each input token in the sequence
+                (the previous two being the word and position embeddings).
+                The input, position and token_type embeddings are summed inside the Transformer before the first
+                self-attention block.
+            `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+                with indices selected in [-1, 0, ..., config.vocab_size]. All labels set to -1 are ignored (masked), the loss
+                is only computed for the labels set in [0, ..., config.vocab_size]
+            `mc_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size]
+                with indices selected in [0, ..., num_choices].
+            `adv_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size, num_choices]
+                with indices selected in [0, ..., num_adv_labels].
+
+            `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
+                (key and values in the attention blocks) to speed up sequential decoding
+                (this is the presents output of the model, cf. below).
+
+        Outputs:
+            if `lm_labels` and `multiple_choice_labels` are not `None`:
+                Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
+            else: a tuple with
+                `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, config.vocab_size]
+                `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
+                `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
+                    torch.FloatTensors. They can be reused to speed up sequential decoding.
+
+        Example usage:
+        ```python
+        # Already been converted into BPE token ids
+        input_ids = torch.LongTensor([[[31, 51, 99], [15, 5, 0]]])  # (bsz, number of choice, seq length)
+        mc_token_ids = torch.LongTensor([[2], [1]]) # (bsz, number of choice)
+
+        config = modeling_gpt2.GPT2Config()
+
+        model = modeling_gpt2.GPT2LMHeadModel(config)
+        lm_logits, multiple_choice_logits, presents = model(input_ids, mc_token_ids)
+        ```
+        """
+    def __init__(self, config, num_adv_labels, **kwargs):
+        super(GPT2DoubleHeadsModelwithAdversarial, self).__init__(config, **kwargs)
+        self.adv_classifier_head = GPT2ClassifierHead(config, num_labels=num_adv_labels, invert_gradients=True) if num_adv_labels > 1 else None
+        self.num_adv_labels = num_adv_labels
+
+    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, adv_labels=None, token_type_ids=None,
+                position_ids=None, past=None):
+        transformer_output = self.transformer(input_ids, position_ids, token_type_ids, past)
+        if self.transformer.output_attentions:
+            all_attentions, hidden_states, presents = transformer_output
+        else:
+            hidden_states, presents = transformer_output
+        lm_logits = self.lm_head(hidden_states)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
+        adv_logits = self.adv_classifier_head(hidden_states, mc_token_ids) if self.adv_classifier_head is not None else None
+        losses = []
+        if lm_labels is not None:
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = lm_labels[..., 1:].contiguous()
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            losses.append(loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)))
+        if mc_labels is not None:
+            loss_fct = CrossEntropyLoss()
+            losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
+        if  adv_labels is not None and adv_logits is not None:
+            loss_fct = CrossEntropyLoss()
+            loss_adv = loss_fct(adv_logits.view(-1, self.adv_classifier_head.num_labels), adv_labels.view(-1))
+            losses.append(loss_adv)
+        if losses:
+            return losses
+        if self.transformer.output_attentions:
+            return all_attentions, lm_logits, mc_logits, presents
+        return lm_logits, mc_logits, presents
+
+
 TYPE_BOS = "<bos>"
+TYPE_EOS = "<eos>"
 TYPE_BACKGROUND = "<background>"
 TYPE_BOT = "<bot>"
 TYPE_USER = "<user>"
 TYPE_BOT_DEPRECATED = "<speaker1>"
 TYPE_USER_DEPRECATED = "<speaker2>"
 TYPE_PAD = "<pad>"
-SPECIAL_TOKENS = [TYPE_BOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+SPECIAL_TOKENS = [TYPE_BOS, TYPE_EOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
+MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 # implemented models:
@@ -37,7 +173,7 @@ PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 # see huggingface/pytorch-pretrained-bert for available model names
 MODELS = {
     'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
-    'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
+    'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
 }
 
 logger = logging.getLogger(__file__)
@@ -119,13 +255,14 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
     type_bot = tokenizer.special_tokens[TYPE_BOT]
     type_user = tokenizer.special_tokens[TYPE_USER]
+    type_eos = tokenizer.special_tokens[TYPE_EOS]
 
-    for dataset_path in dataset_paths:
-        dataset_id = '<%s>' % os.path.basename(dataset_path)
-        assert dataset_id in tokenizer.special_tokens, \
-            'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
-            % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
-        dataset_id = tokenizer.special_tokens[dataset_id]
+    for dataset_idx, dataset_path in enumerate(dataset_paths):
+        #dataset_id = '<%s>' % os.path.basename(dataset_path)
+        #assert dataset_id in tokenizer.special_tokens, \
+        #    'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
+        #    % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
+        #dataset_id = tokenizer.special_tokens[dataset_id]
 
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache)
 
@@ -175,7 +312,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                         instance, sequence = build_input_from_segments(context, history, candidate,
                                                                        tokenizer, lm_labels,
                                                                        max_sequence_length=max_sequence_length,
-                                                                       eos=dataset_id)
+                                                                       eos=type_eos)
                         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
                         if l_trunc > 0:
                             counter_truncated[l_trunc] += 1
@@ -184,6 +321,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                         n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
+                    datasets[dataset_name]["adv_labels"].append([dataset_idx] * num_candidates)
                     #context = [context[-1]] + context[:-1]  # permuted personalities
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
@@ -194,7 +332,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
         dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(TYPE_PAD))
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
-            if input_name != "mc_labels":
+            if input_name not in ["mc_labels", "adv_labels"]:
                 tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
             tensor_datasets[dataset_name].append(tensor)
 
@@ -224,6 +362,7 @@ def train():
     parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
     parser.add_argument("--lm_coef", type=float, default=1.0, help="LM loss coefficient")
     parser.add_argument("--mc_coef", type=float, default=1.0, help="Multiple-choice loss coefficient")
+    parser.add_argument("--adv_coef", type=float, default=1.0, help="Adversarial dataset prediction loss coefficient")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--personality_permutations", type=int, default=1, help="Number of permutations of personality sentences")
@@ -263,17 +402,18 @@ def train():
     tokenizer_class, model_class, _ = MODELS[args.model]
     if not args.model_checkpoint:
         args.model_checkpoint = args.model
-    tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
-    model = model_class.from_pretrained(args.model_checkpoint)
     dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
+    tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
+    model = model_class.from_pretrained(args.model_checkpoint, num_adv_labels=len(dataset_ids))
+
     if len(tokenizer.special_tokens) > 0:
-        for st in SPECIAL_TOKENS + dataset_ids:
+        for st in SPECIAL_TOKENS:
             # TODO: implement merging (or just overwrite?)
             assert st in tokenizer.special_tokens, \
                 'loaded tokenizer already has special tokens (%s), but does not contain required token "%s"' \
                 % (str(tokenizer.special_tokens), st)
     else:
-        tokenizer.set_special_tokens(SPECIAL_TOKENS + dataset_ids)
+        tokenizer.set_special_tokens(SPECIAL_TOKENS)
         model.set_num_special_tokens(len(tokenizer.special_tokens))
     model.to(args.device)
     optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
@@ -302,11 +442,17 @@ def train():
     def update(engine, batch):
         model.train()
         batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-        lm_loss, mc_loss = model(*batch)
-        if n_gpu > 1:
-            lm_loss = lm_loss.mean()  # mean() to average on multi-gpu.
-            mc_loss = mc_loss.mean()
+        losses = model(*batch)
+        if n_gpu > 1: # mean() to average on multi-gpu.
+            for i in range(len(losses)):
+                losses[i] = losses[i].mean()
+        lm_loss, mc_loss = losses[0], losses[1]
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
+        loss_wo_adv = loss.clone()
+        if len(losses) > 2:
+            adv_loss = losses[2]
+            loss += (adv_loss * args.adv_coef) / args.gradient_accumulation_steps
+
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
@@ -317,7 +463,7 @@ def train():
         if engine.state.iteration % args.gradient_accumulation_steps == 0:
             optimizer.step()
             optimizer.zero_grad()
-        return loss.item()
+        return loss.item(), loss_wo_adv.item()
     trainer = Engine(update)
 
     # Evaluation function and evaluator (evaluator output is the input of the metrics)
@@ -325,7 +471,7 @@ def train():
         model.eval()
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-            input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
+            input_ids, mc_token_ids, lm_labels, mc_labels, adv_labels, token_type_ids = batch
             # ATTENTION: requires branch "gpt-2-special-tokens" of "https://github.com/ArneBinder/pytorch-pretrained-BERT"!
             logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()).replace('<pad>', ''))
             model_outputs = model(input_ids, mc_token_ids, token_type_ids=token_type_ids)
@@ -352,7 +498,9 @@ def train():
     trainer.add_event_handler(Events.ITERATION_STARTED, scheduler)
 
     # Prepare metrics - note how we compute distributed metrics 
-    RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
+    RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss")
+    RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/o_adv")
+    RunningAverage(output_transform=lambda x: x[0]-x[1]).attach(trainer, "loss_only_adv")
     metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-1), output_transform=lambda x: (x[0][0], x[1][0])),
                "accuracy": Accuracy(output_transform=lambda x: (x[0][1], x[1][1]))}
     metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args),
@@ -369,6 +517,8 @@ def train():
 
         tb_logger = TensorboardLogger(log_dir=None)
         tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss"]), event_name=Events.ITERATION_COMPLETED)
+        tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/o_adv"]), event_name=Events.ITERATION_COMPLETED)
+        tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_only_adv"]), event_name=Events.ITERATION_COMPLETED)
         tb_logger.attach(trainer, log_handler=OptimizerParamsHandler(optimizer), event_name=Events.ITERATION_STARTED)
         tb_logger.attach(evaluator, log_handler=OutputHandler(tag="validation", metric_names=list(metrics.keys()), another_engine=trainer), event_name=Events.EPOCH_COMPLETED)
 
