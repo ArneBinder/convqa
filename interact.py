@@ -113,8 +113,12 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
 
         input_ids = torch.tensor(instance["input_ids"], device=args.device).unsqueeze(0)
         token_type_ids = torch.tensor(instance["token_type_ids"], device=args.device).unsqueeze(0)
-
-        logits = model(input_ids, token_type_ids=token_type_ids)
+        if explain:
+            position_ids = torch.arange(0, input_ids.size(-1), dtype=torch.long, device=input_ids.device)
+            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        else:
+            position_ids = None
+        logits = model(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
         if "gpt2" == args.model:
             logits = logits[0]
@@ -147,16 +151,25 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
             model_wte = model.transformer.wte.weight
             if torch.min(model_wte.grad) == torch.max(model_wte.grad) == 0.0:
                 logger.warning('create explanations (i: %i): min==max==0.0 for ALL embedding gradients' % len(current_output))
+            model_wpe = model.transformer.wpe.weight
+            if torch.min(model_wpe.grad) == torch.max(model_wpe.grad) == 0.0:
+                logger.warning('create explanations (i: %i): min==max==0.0 for ALL position embedding gradients' % len(current_output))
             grads_input_ids = model_wte.grad[input_ids.squeeze()]
             grads_token_type_ids = model_wte.grad[token_type_ids.squeeze()]
+            grads_position_ids = model_wpe.grad[position_ids.squeeze()]
             if torch.min(grads_input_ids) == torch.max(grads_input_ids) == 0.0:
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. input_ids' % len(current_output))
             if torch.min(grads_token_type_ids) == torch.max(grads_token_type_ids) == 0.0:
                 logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_token_type_ids' % len(current_output))
+            if torch.min(grads_position_ids) == torch.max(grads_position_ids) == 0.0:
+                logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_position_ids' % len(current_output))
             expl_input_ids = (torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])).sum(dim=-1)
             expl_token_type_ids = (torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])).sum(dim=-1)
+            expl_position_ids = (torch.abs(grads_position_ids) * torch.abs(model_wpe[position_ids.squeeze()])).sum(dim=-1)
             last_ids = (instance["input_ids"], instance["token_type_ids"])
-            explanations.append((expl_input_ids.detach().cpu().numpy(), expl_token_type_ids.cpu().detach().numpy()))
+            explanations.append({'input_ids': expl_input_ids.detach().cpu().numpy(),
+                                 'token_type_ids': expl_token_type_ids.cpu().detach().numpy(),
+                                 'position_ids': expl_position_ids.cpu().detach().numpy()})
 
         if prev.item() in special_tokens_ids:
             eos = prev.item()
@@ -254,47 +267,43 @@ def norm_expl(expl, _min=None, square=False):
 def process_explanations(explanations, last_ids, tokenizer):
     all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
     all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
-    token_explanations_html = []
-    type_explanations_html = []
-    explanations_html = []
-    token_explanation_sum = None
-    type_explanation_sum = None
-    for token_explanation, type_explanation in explanations:
-        if token_explanation_sum is None:
-            token_explanation_sum = token_explanation
+    explanations_all_html = []
+    explanations_html = {}
+    explanations_sum = None
+    for current_explanations in explanations:
+        if explanations_sum is None:
+            explanations_sum = current_explanations
         else:
-            token_explanation_sum = token_explanation_sum + norm_expl(token_explanation[:len(token_explanation_sum)], _min=0.0)
-        if type_explanation_sum is None:
-            type_explanation_sum = type_explanation
-        else:
-            type_explanation_sum = type_explanation_sum + norm_expl(type_explanation[:len(token_explanation_sum)], _min=0.0)
-        explanations_html.append(
-            '<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=token_explanation + type_explanation)))
-        token_explanations_html.append(
-            '<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=token_explanation)))
-        type_explanations_html.append('<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=type_explanation)))
+            explanations_sum = {expl_type: explanations_sum[expl_type] + norm_expl(expl[:len(explanations_sum[expl_type])], _min=0.0) for expl_type, expl in current_explanations.items()}
+        for expl_type, expl in current_explanations.items():
+            explanations_html.setdefault(expl_type,[]).append('<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=expl)))
+        explanations_all_html.append('<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=sum(current_explanations.values()))))
 
-    explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
-                       % '\n'.join(explanations_html)
-    open('explanations.html', 'w').write(explanation_html)
-    token_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
-                             % '\n'.join(token_explanations_html)
-    open('explanations_token.html', 'w').write(token_explanation_html)
-    type_explanation_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
-                            % '\n'.join(type_explanations_html)
-    open('explanations_type.html', 'w').write(type_explanation_html)
+    # individual explanations per type and per prediction
+    for expl_type, explanations_html in explanations_html.items():
+        expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                    % '\n'.join(explanations_html)
+        open('explanations_%s.html' % expl_type, 'w').write(expl_html)
 
-    res = visualize_explanation(tokens=all_tokens, expl=token_explanation_sum + type_explanation_sum, special_tokens=tokenizer.special_tokens.keys())
-    explanation_sum_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
+    # individual explanations per prediction (summed over types)
+    expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                       % '\n'.join(explanations_all_html)
+    open('explanations.html', 'w').write(expl_html)
+
+    # individual explanations per type (summed over predictions)
+    for expl_type, expl in explanations_sum.items():
+        expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
+                    % '\n'.join(['<div>%s</div>' % u for u in
+                                 visualize_explanation(tokens=all_tokens, expl=explanations_sum[expl_type],
+                                                       special_tokens=tokenizer.special_tokens.keys())])
+        open('explanations_sum_%s.html' % expl_type, 'w').write(expl_html)
+
+    # all summed together
+    res = visualize_explanation(tokens=all_tokens, expl=sum(explanations_sum.values()), special_tokens=tokenizer.special_tokens.keys())
+    expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
                        % '\n'.join(['<div>%s</div>' % u for u in res])
-    open('explanations_sum.html', 'w').write(explanation_sum_html)
-    token_explanation_sum_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
-                                 % '\n'.join(['<div>%s</div>' % u for u in visualize_explanation(tokens=all_tokens, expl=token_explanation_sum, special_tokens=tokenizer.special_tokens.keys())])
-    open('explanations_sum_token.html', 'w').write(token_explanation_sum_html)
-    type_explanation_sum_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
-                                % '\n'.join(
-        ['<div>%s</div>' % u for u in visualize_explanation(tokens=all_tokens, expl=type_explanation_sum, special_tokens=tokenizer.special_tokens.keys())])
-    open('explanations_sum_type.html', 'w').write(type_explanation_sum_html)
+    open('explanations_sum.html', 'w').write(expl_html)
+
     return res
 
 
