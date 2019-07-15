@@ -235,6 +235,15 @@ Validation: {'accuracy': 0.06569343065693431,
  'nll': 4.694358315128479}
 (running) cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/corpora/PersonaCHAT/personachat_self_original.json,/home/abinder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/abinder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1  &> train2.log`
 checkpoints to: runs/Jul10_22-00-40_serv-9200
+INFO:ignite.engine.engine.Engine:Epoch[1] Complete. Time taken: 04:29:54
+Epoch: [595156/595156] 100%|██████████, loss=1.03e+00 [66:40:01<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 04:29:54
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 66:40:02
+Gradient overflow.  Skipping step, loss scaler 0 reducing loss scale to 4096.0 <several times>
+Validation: {'accuracy': 0.8474632967849842,
+ 'average_accuracy': 0.8474632967849842,
+ 'average_nll': 1.4750480423361156,
+ 'average_ppl': 4.371245772743935,
+ 'nll': 1.4750480423361156}
 
 
 ## ideas
