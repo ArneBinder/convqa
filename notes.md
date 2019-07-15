@@ -244,7 +244,7 @@ Validation: {'accuracy': 0.8474632967849842,
  'average_nll': 1.4750480423361156,
  'average_ppl': 4.371245772743935,
  'nll': 1.4750480423361156}
-
+cmd_endpoint `CUDA_VISIBLE_DEVICES=1 python ./interact.py --model gpt2 --model_checkpoint runs/Jul10_22-00-40_serv-9200 --max_history 2 --start_endpoint --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle`
 
 ## ideas
  * improve context fetching:
