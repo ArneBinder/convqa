@@ -382,7 +382,47 @@ def ask():
     return response
 
 
-def init():
+@endpoint.route("/reload", methods=['GET', 'POST'])
+def reload_model():
+    global model, tokenizer
+    try:
+        start = time.time()
+        logging.info('prediction requested')
+        params = get_params()
+        logger.debug(json.dumps(params, indent=2))
+        args_model_checkpoint = args.model_checkpoint
+        full_model_checkpoint = os.path.join(os.path.dirname(args_model_checkpoint), params['model_checkpoint'])
+        model, tokenizer = load_model(model_checkpoint=full_model_checkpoint, model_type=params['model_type'])
+
+        response = Response(f'loaded model {params["model_checkpoint"]} successfully')
+        logger.info("Time spent handling the request: %f" % (time.time() - start))
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error(tb)
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        raise InvalidUsage('%s: %s @line %s in %s' % (type(e).__name__, str(e), exc_tb.tb_lineno, fname))
+    return response
+
+def load_model(model_checkpoint, model_type):
+    if model_checkpoint == "":
+        model_checkpoint = download_pretrained_model()
+
+    logger.info("Get pretrained model and tokenizer")
+    if model_type not in MODELS:
+        raise NotImplementedError('model "%s" not implemented. use one of %s' % (model_type, str(MODELS.keys)))
+    tokenizer_class, _, model_class = MODELS[model_type]
+
+    _tokenizer = tokenizer_class.from_pretrained(model_checkpoint)
+    _model = model_class.from_pretrained(model_checkpoint)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    _model.to(device)
+    _model.eval()
+    return _model, _tokenizer
+
+
+def get_args():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
@@ -409,28 +449,9 @@ def init():
                                                                        "wikipedia cuid -> {'text': ['This is a sentence.', 'This is another sentence.']}")
 
     args = parser.parse_args()
-
     logger.info(pformat(args))
 
-    if args.model_checkpoint == "":
-        args.model_checkpoint = download_pretrained_model()
-
-    random.seed(args.seed)
-    torch.random.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-
-    logger.info("Get pretrained model and tokenizer")
-    if args.model not in MODELS:
-        raise NotImplementedError('model "%s" not implemented. use one of %s' % (args.model, str(MODELS.keys)))
-    tokenizer_class, _, model_class = MODELS[args.model]
-
-    tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
-    model = model_class.from_pretrained(args.model_checkpoint)
-
-    model.to(args.device)
-    model.eval()
-
-    return tokenizer, model, args
+    return args
 
 
 def run(tokenizer, model, args):
@@ -590,7 +611,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__file__)
 
-    tokenizer, model, args = init()
+    args = get_args()
+    random.seed(args.seed)
+    torch.random.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+
+    model, tokenizer = load_model(model_checkpoint=args.model_checkpoint, model_type=args.model)
+
     if args.coqa_file:
         try:
             logger.info('create sentencizer with spacy ...')
