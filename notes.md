@@ -258,8 +258,16 @@ Validation: {'accuracy': 0.17153284671532848,
  'average_nll': 5.488889531062467,
  'average_ppl': 241.98833706824928,
  'nll': 5.488889531062467}
-(running) cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/corpora/PersonaCHAT/personachat_self_original.json,/home/abinder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/abinder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1  &> train2.log`
+cmd_train `CUDA_VISIBLE_DEVICES=2 python ./train.py --model gpt2 --dataset_path /home/abinder/corpora/PersonaCHAT/personachat_self_original.json,/home/abinder/corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,/home/abinder/corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --personality_permutations 1 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --device cuda --fp16 O1  &> train2.log`
 checkpoints to: runs/Jul15_21-05-16_serv-9200
+INFO:ignite.engine.engine.Engine:Epoch[1] Complete. Time taken: 04:25:47
+Epoch: [595156/595156] 100%|██████████, loss=1.22e+00 [67:29:23<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 04:25:47
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 67:29:25
+Validation: {'accuracy': 0.8225980301059282,
+ 'average_accuracy': 0.8225980301059282,
+ 'average_nll': 1.4579965163544157,
+ 'average_ppl': 4.2973412450292345,
+ 'nll': 1.4579965163544157}
 
 
 
