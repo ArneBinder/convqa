@@ -87,7 +87,7 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     context = []
     if background is not None:
-        if isinstance(background, list):
+        if isinstance(background, list) or isinstance(background, tuple):
             context.extend([(type_background, b) for b in background])
         else:
             context.append((type_background, background))

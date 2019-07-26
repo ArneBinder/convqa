@@ -13,6 +13,7 @@ import re
 import sys
 import time
 import traceback
+from collections import defaultdict
 
 import requests
 import torch
@@ -85,19 +86,34 @@ def hello_world():
     return "Hello World!"
 
 
-def visualize_explanation(tokens, expl, special_tokens=()):
+def token_to_html(token, color):
+    return '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (color, color, html.escape(token))
+
+
+def visualize_explanation(tokens, expl, split_tokens=(), return_tuples=False):
     expl = norm_expl(expl, _min=0.0)
     expl *= 256
 
     html_res = []
     current_html_res = ''
+    prev_special = None
     for i in range(len(expl)):
-        if tokens[i] in special_tokens and len(current_html_res) > 0:
-            html_res.append(current_html_res)
-            current_html_res = ''
-        c = 256 - int(expl[i])
-        current_html_res += '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (c, c, html.escape(tokens[i]))
-    html_res.append(current_html_res)
+        if tokens[i] in split_tokens:
+            if len(current_html_res) > 0:
+                if return_tuples:
+                    html_res.append((prev_special, current_html_res))
+                else:
+                    html_res.append(prev_special + current_html_res)
+                current_html_res = ''
+            prev_special = tokens[i] if return_tuples else token_to_html(token=tokens[i], color=256 - int(expl[i]))
+        else:
+            current_html_res += token_to_html(token=tokens[i], color=256 - int(expl[i]))
+
+    if return_tuples:
+        html_res.append((prev_special, current_html_res))
+    else:
+        # allow not split result (no special_tokens given)
+        html_res.append((prev_special or '') + current_html_res)
     return html_res
 
 
@@ -132,13 +148,13 @@ def process_explanations(explanations, last_ids, tokenizer):
         expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
                     % '\n'.join(['<div>%s</div>' % u for u in
                                  visualize_explanation(tokens=all_tokens, expl=explanations_sum[expl_type],
-                                                       special_tokens=tokenizer.special_tokens.keys())])
+                                                       split_tokens=tokenizer.special_tokens.keys())])
         open('explanations_sum_%s.html' % expl_type, 'w').write(expl_html)
 
     # all summed together
-    res = visualize_explanation(tokens=all_tokens, expl=sum(explanations_sum.values()), special_tokens=tokenizer.special_tokens.keys())
+    res = visualize_explanation(tokens=all_tokens, expl=sum(explanations_sum.values()), split_tokens=tokenizer.special_tokens.keys(), return_tuples=True)
     expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
-                       % '\n'.join(['<div>%s</div>' % u for u in res])
+                       % '\n'.join([f'<div>{html.escape(special_token)}:{u}</div>' for special_token, u in res])
     open('explanations_sum.html', 'w').write(expl_html)
 
     return res
@@ -181,29 +197,35 @@ def ask():
 
         background_encoded = None
         if background is not None:
-            background_encoded = [tokenizer.encode(b) for b in background.values()]
+            background_keys, background_encoded = zip(*[(k, tokenizer.encode(b)) for k, b in background.items()])
             params['background'] = background
+        else:
+            background_keys = []
 
         personality_encoded = None
         if 'personality' in params:
             personality_encoded = tokenizer.encode(params['personality'])
 
         history_encoded = [tokenizer.encode(utterance) for utterance in history[-(2 * args.max_history + 1):]]
-        if params.get('explain', False):
-            out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                                        history=history_encoded, tokenizer=tokenizer, model=model,
-                                                        args=args, explain=params.get('explain', False))
-            params['explanation'] = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
-            params['explanation'][-1]+= '<span style="background-color:grey">%s</span>' \
-                                        % tokenizer.decode(out_ids, skip_special_tokens=False)
-
-            resp_html = '\n'.join(['<div>%s</div>' % u for u in params['explanation']])
-            resp_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explained response</title>\n</head>\n<body>\n%s</body>\n</html>' % resp_html
-            http_accept = 'text/html'
-            response = Response(resp_html, mimetype=http_accept)
-        else:
-            # predict only if any history / user_input (was added to history) is available
-            if len(history) > 0:
+        # predict only if any history / user_input (was added to history) is available
+        if len(history) > 0:
+            if params.get('explain', False):
+                out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                                            history=history_encoded, tokenizer=tokenizer, model=model,
+                                                            args=args, explain=params.get('explain', False))
+                explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
+                # add prediction
+                explanations_list[-1] = (explanations_list[-1][0],
+                                         f'<span style="background-color:grey">{tokenizer.decode(out_ids)}</span>')
+                params['explanation'] = {'history': [], 'background': {}}
+                n_background = 0
+                for special_token, expl_html in explanations_list:
+                    if special_token in ['<user>', '<bot>']:
+                        params['explanation']['history'].append(expl_html)
+                    elif special_token == '<background>':
+                        params['explanation']['background'][background_keys[n_background]] = expl_html
+                        n_background += 1
+            else:
                 with torch.no_grad():
                     out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
                                                    history=history_encoded, #[-(2 * args.max_history + 1):],
