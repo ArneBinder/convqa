@@ -9,7 +9,7 @@
         <h1>Chatty Chat</h1>
         {% if background is defined and background|length > 0 %}
             <div class="background">
-                <h2>Queried Background Information</h2>
+                <h3>Queried Background Information</h3>
                 {% for key, value in background.items() %}
                     <label class="collapsible">
                         <input type="checkbox" />
@@ -32,7 +32,7 @@
             {% if history is defined %}
             <input title="history" name="history" type="hidden" value="{{ history|tojson|forceescape }}"/>
             {% endif %}
-            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/><label for="explain">explain <input id="explain" type="checkbox" name="explain"/></label>
+            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/> <label for="explain">explain<input id="explain" type="checkbox" name="explain"/></label>
         </form>
     </body>
 </html>

@@ -26,14 +26,13 @@ body {
   border: 1px transparent dotted;
 }
 .collapsible .arrow {
-  margin-right: 0.5em;
+  margin-right: 0.3em;
   display: inline-block;
-  transform: rotate(90deg);
   transition: transform 0.25s ease-out;
 }
 .collapsible input:checked ~ .arrow,
 .collapsible input:checked ~ .collapser .arrow {
-  transform: rotate(270deg);
+  transform: rotate(90deg);
 }
 .collapsible .collapsed {
   font-size: 0;
