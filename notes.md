@@ -268,7 +268,7 @@ Validation: {'accuracy': 0.8225980301059282,
  'average_nll': 1.4579965163544157,
  'average_ppl': 4.2973412450292345,
  'nll': 1.4579965163544157}
-
+cmd_endpoint `CUDA_VISIBLE_DEVICES=1 python web/endpoint.py --model gpt2 --model_checkpoint runs/Jul15_21-05-16_serv-9200 --max_history 2 --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle`
 
 
 ## ideas
