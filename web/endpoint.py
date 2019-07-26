@@ -16,13 +16,14 @@ import traceback
 
 import requests
 import torch
-from flask import Flask, jsonify, Response, request
+from flask import Flask, jsonify, Response, request, render_template
 
 from interact import get_args, load_model, sample_sequence, norm_expl
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
-endpoint = Flask(__name__, static_url_path='')
+#endpoint = Flask(__name__, static_url_path='')
+endpoint = Flask(__name__)
 #cors = CORS(endpoint)
 
 
@@ -98,7 +99,6 @@ def visualize_explanation(tokens, expl, special_tokens=()):
     return html_res
 
 
-
 def process_explanations(explanations, last_ids, tokenizer):
     all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
     all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
@@ -149,14 +149,26 @@ def ask():
         logging.info('prediction requested')
         params = get_params()
         logger.debug(json.dumps(params, indent=2))
-        history = params.get('history', [])
-        user_input = params['user_input']
-        history.append(user_input)
+        history = params.get('history', '')
+        if history == '':
+            history = []
+        elif isinstance(history, str):
+            hist_str = html.unescape(history)
+            history = json.loads(hist_str)
+        user_input = params.get('user_input', None)
+        if user_input is not None:
+            history.append(user_input)
 
         # create required format of context: dict with entry_id -> list of sentences (strings)
-        if isinstance(params.get('background', None), str):
-            params['background'] = {'user': params['background']}
+        #if isinstance(params.get('background', None), str):
+        #    params['background'] = {'user': params['background']}
         background = params.get('background', None)
+        if isinstance(background, str):
+            if background == '':
+                background = None
+            else:
+                backgr_str = html.unescape(background)
+                background = json.loads(backgr_str)
         if not params.get('dont_fetch', False):
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
@@ -174,10 +186,8 @@ def ask():
         if 'personality' in params:
             personality_encoded = tokenizer.encode(params['personality'])
 
-        history_encoded = [tokenizer.encode(utterance) for utterance in history]
-
+        history_encoded = [tokenizer.encode(utterance) for utterance in history[-(2 * args.max_history + 1):]]
         if params.get('explain', False):
-
             out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
                                                         history=history_encoded, tokenizer=tokenizer, model=model,
                                                         args=args, explain=params.get('explain', False))
@@ -187,25 +197,29 @@ def ask():
 
             resp_html = '\n'.join(['<div>%s</div>' % u for u in params['explanation']])
             resp_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explained response</title>\n</head>\n<body>\n%s</body>\n</html>' % resp_html
-            return_type = 'text/html'
-            response = Response(resp_html, mimetype=return_type)
-            logger.info("Time spent handling the request: %f" % (time.time() - start))
+            http_accept = 'text/html'
+            response = Response(resp_html, mimetype=http_accept)
         else:
-            with torch.no_grad():
-                out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                               history=history_encoded, tokenizer=tokenizer, model=model, args=args,
-                                               explain=params.get('explain', False))
+            # predict only if any history / user_input (was added to history) is available
+            if len(history) > 0:
+                with torch.no_grad():
+                    out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
+                                                   history=history_encoded, #[-(2 * args.max_history + 1):],
+                                                   tokenizer=tokenizer, model=model, args=args,
+                                                   explain=params.get('explain', False))
 
-            history_encoded.append(out_ids)
-            history_encoded = history_encoded[-(2 * args.max_history + 1):]
-            params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
-            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
-            params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
-            logger.debug('predicted:\n%s' % params['prediction'])
+                history_encoded.append(out_ids)
+                params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
+                params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+                params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
+                logger.debug('predicted:\n%s' % params['prediction'])
 
-            return_type = params.get('HTTP_ACCEPT', False) or 'application/json'
-            json_data = json.dumps(params)
-            response = Response(json_data, mimetype=return_type)
+            http_accept = params.get('HTTP_ACCEPT', False) or 'text/html'
+            if 'application/json' in http_accept:
+                json_data = json.dumps(params)
+                response = Response(json_data, mimetype=http_accept)
+            else:
+                response = Response(render_template('chat.html', **params), mimetype='text/html')
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:
@@ -261,6 +275,9 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
     def _context_fetcher(s, previous_context=None):
         logger.info('fetch context for "%s"...' % s)
         res = previous_context or {}
+        if len(s) == 0:
+            logger.warning('input for context_fetcher is an empty string')
+            return res
         query = {'text': s, "language": {"lang": "en"}}
         files = {'query': (None, json.dumps(query))}
         response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
@@ -337,4 +354,5 @@ if __name__ == "__main__":
         context_fetcher = None
 
     logger.info('Starting the API')
-    endpoint.run(host='0.0.0.0', port=5000)
+    # endpoint.static = 'static'
+    endpoint.run(host='0.0.0.0', port=5000)#, debug=True)

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8"/>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}"/>
+        <title>Generative Conversational Question Answering - DEMO</title>
+    </head>
+    <body>
+        <h1>Chatty Chat</h1>
+        <div class="history">
+            {% for utterance in history %}
+            <p class="utterance"><span class="author">{{ loop.cycle('you', 'bot') }}</span>: <span class="content">{{ utterance }}</span></p>
+            {% endfor %}
+        </div>
+        <form action="/ask" method="post">
+            {% if background is defined %}
+            <input title="background" name="background" type="hidden" value="{{ background|tojson|forceescape }}"/>
+            {% endif %}
+            {% if history is defined %}
+            <input title="history" name="history" type="hidden" value="{{ history|tojson|forceescape }}"/>
+            {% endif %}
+            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/>
+        </form>
+    </body>
+</html>
