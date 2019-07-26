@@ -196,7 +196,7 @@ def ask():
                 pass
 
         background_encoded = None
-        if background is not None:
+        if background is not None and len(background) > 0:
             background_keys, background_encoded = zip(*[(k, tokenizer.encode(b)) for k, b in background.items()])
             params['background'] = background
         else:
@@ -232,18 +232,18 @@ def ask():
                                                    tokenizer=tokenizer, model=model, args=args,
                                                    explain=params.get('explain', False))
 
-                history_encoded.append(out_ids)
-                params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
-                params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
-                params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
-                logger.debug('predicted:\n%s' % params['prediction'])
+            history_encoded.append(out_ids)
+            params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
+            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+            params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
+            logger.debug('predicted:\n%s' % params['prediction'])
 
-            http_accept = params.get('HTTP_ACCEPT', False) or 'text/html'
-            if 'application/json' in http_accept:
-                json_data = json.dumps(params)
-                response = Response(json_data, mimetype=http_accept)
-            else:
-                response = Response(render_template('chat.html', **params), mimetype='text/html')
+        http_accept = params.get('HTTP_ACCEPT', False) or 'text/html'
+        if 'application/json' in http_accept:
+            json_data = json.dumps(params)
+            response = Response(json_data, mimetype=http_accept)
+        else:
+            response = Response(render_template('chat.html', **params), mimetype='text/html')
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:

@@ -22,7 +22,7 @@
         {% endif %}
         <div class="history">
             {% for utterance in history %}
-            <p class="utterance"><span class="author">{{ 'bot' if (loop.length - loop.index) is divisibleby 2 else 'you' }}</span>: <span class="content">{{ explanation['history'][loop.index]|safe if explanation is defined else utterance }}</span></p>
+            <p class="utterance"><span class="author">{{ 'you' if (loop.length - loop.index0) is divisibleby 2 else 'bot' }}</span>: <span class="content">{{ explanation['history'][loop.index0]|safe if explanation is defined else utterance }}</span></p>
             {% endfor %}
         </div>
         <form action="/ask" method="post">
@@ -32,7 +32,7 @@
             {% if history is defined %}
             <input title="history" name="history" type="hidden" value="{{ history|tojson|forceescape }}"/>
             {% endif %}
-            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/><input type="checkbox" name="explain"/>
+            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/><label for="explain">explain <input id="explain" type="checkbox" name="explain"/></label>
         </form>
     </body>
 </html>
