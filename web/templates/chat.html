@@ -32,7 +32,7 @@
             {% if history is defined %}
             <input title="history" name="history" type="hidden" value="{{ history|tojson|forceescape }}"/>
             {% endif %}
-            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/>
+            <input title="enter a question or some random stuff" name="user_input" type="text" /><input type="submit" value="send"/><input type="checkbox" name="explain"/>
         </form>
     </body>
 </html>

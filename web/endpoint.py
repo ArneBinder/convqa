@@ -216,7 +216,7 @@ def ask():
                 explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
                 # add prediction
                 explanations_list[-1] = (explanations_list[-1][0],
-                                         f'<span style="background-color:grey">{tokenizer.decode(out_ids)}</span>')
+                                         f'<span style="background-color:DodgerBlue ">{tokenizer.decode(out_ids)}</span>')
                 params['explanation'] = {'history': [], 'background': {}}
                 n_background = 0
                 for special_token, expl_html in explanations_list:
