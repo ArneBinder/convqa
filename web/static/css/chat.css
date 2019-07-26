@@ -26,8 +26,7 @@ body {
   border: 1px transparent dotted;
 }
 .collapsible .arrow {
-  float: right;
-  margin-left: 0.5em;
+  margin-right: 0.5em;
   display: inline-block;
   transform: rotate(90deg);
   transition: transform 0.25s ease-out;

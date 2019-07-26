@@ -12,10 +12,10 @@
                 <h2>Queried Background Information</h2>
                 {% for key, value in background.items() %}
                     <label class="collapsible">
-                      <input type="checkbox" />
-                      <span class="collapser"><span class="name">{{ key }}</span></span>
-                      <span class="arrow">&gt;</span>
-                      <div class="collapsed"><span class="content">{{ value }}</span></div>
+                        <input type="checkbox" />
+                        <span class="arrow">&gt;</span>
+                        <span class="collapser"><span class="name">{{ key }}</span></span>
+                        <div class="collapsed"><span class="content">{{ value }}</span></div>
                     </label>
                 {% endfor %}
             </div>
