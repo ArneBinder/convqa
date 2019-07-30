@@ -164,6 +164,26 @@ def process_explanations(explanations, last_ids, tokenizer):
     return res
 
 
+def insert_annotations(s, annotations, offset=0, exclude_key='text'):
+    s_off = 0
+    res = s
+    for annot_key, annot in sorted(annotations.items(), key=lambda a: a[1]['offsetStart']):
+        a_start = annot['offsetStart'] - offset
+        a_len = annot['offsetEnd'] - annot['offsetStart']
+        if 0 <= a_start < len(s) and 0 <= (a_start + a_len) < len(s):
+            insert_opening = '<span class="named-entity" %s>' \
+                             % " ".join(["data-" + k
+                                         + "=\"" + (' '.join(v) if isinstance(v, list) else str(v)) + "\""
+                                         for k, v in annot.items() if k != exclude_key])
+            res = res[:a_start + s_off] + insert_opening + res[a_start + s_off:]
+            s_off += len(insert_opening)
+            insert_closing = '</span>'
+            res = res[:a_start + a_len + s_off] + insert_closing + res[a_start + a_len + s_off:]
+            s_off += len(insert_closing)
+
+    return res
+
+
 @endpoint.route("/ask", methods=['GET', 'POST'])
 def ask():
     try:
@@ -191,6 +211,9 @@ def ask():
             else:
                 backgr_str = html.unescape(background)
                 background = json.loads(backgr_str)
+        if background is not None:
+            for k in background:
+                background[k]['external'] = True
         if not params.get('dont_fetch', False):
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
@@ -202,7 +225,7 @@ def ask():
 
         background_encoded = None
         if background is not None and len(background) > 0:
-            background_keys, background_encoded = zip(*[(k, tokenizer.encode(b)) for k, b in background.items()])
+            background_keys, background_encoded = zip(*[(k, tokenizer.encode(b['text'])) for k, b in background.items()])
             params['background'] = background
         else:
             background_keys = []
@@ -246,6 +269,15 @@ def ask():
             params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
             params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
             logger.debug('predicted:\n%s' % params['prediction'])
+
+            # add annotations only when not explaining
+            if not params.get('explain', False):
+                pos_start = 0
+                params['history_annotated'] = []
+                for h in params['history']:
+                    params['history_annotated'].append(insert_annotations(s=h, annotations=params['background'], offset=pos_start))
+                    # increase (1 for space)
+                    pos_start += 1 + len(h)
 
         http_accept = params.get('HTTP_ACCEPT', False) or 'text/html'
         if 'application/json' in http_accept:
@@ -326,6 +358,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                              % (entity['rawName'], wikipedia_entity_uri, entity['nerd_selection_score'], entity['nerd_score']))
                 # fetch only not already available context
                 if wikipedia_entity_uri not in res:
+                    res[wikipedia_entity_uri] = entity
                     logger.info('fetch entity data for "%s"...' % entity['rawName'])
                     wikipedia_id = entity['wikipediaExternalRef']
                     if wikipedia_data is not None:
@@ -334,9 +367,9 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                         if wikipedia_entry is not None:
                             logger.info('found entry for cuid=%i in wikipedia dump' % wikipedia_id)
                             if isinstance(wikipedia_entry['text'], list):
-                                res[wikipedia_entity_uri] = ' '.join([s.strip() for s in wikipedia_entry['text']])
+                                res[wikipedia_entity_uri]['text'] = ' '.join([s.strip() for s in wikipedia_entry['text']])
                             elif isinstance(wikipedia_entry['text'], str):
-                                res[wikipedia_entity_uri] = wikipedia_entry['text']
+                                res[wikipedia_entity_uri]['text'] = wikipedia_entry['text']
                             else:
                                 raise NotImplementedError('wikidata entry for "%s" has unknown format (only list or str are allowed): %s'
                                                           % (wikipedia_entity_uri, str(wikipedia_entry['text'])))
@@ -360,7 +393,10 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
                             definition_cleaned = definition_cleaned.replace("'''", '"')
                             res_current_entity.append(definition_cleaned.strip())
                     if len(res_current_entity) > 0:
-                        res[wikipedia_entity_uri] = ' '.join(res_current_entity)
+                        res[wikipedia_entity_uri]['text'] = ' '.join(res_current_entity)
+                else:
+                    # overwrite all except 'text'
+                    res[wikipedia_entity_uri].update(entity)
 
         assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data.get('entities', [])])
         return res

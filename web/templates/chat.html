@@ -15,14 +15,14 @@
                         <input type="checkbox" />
                         <span class="arrow">&gt;</span>
                         <span class="collapser"><span class="name">{{ key }}</span></span>
-                        <div class="collapsed"><span class="content">{{ explanation['background'][key]|safe if explanation is defined else value }}</span></div>
+                        <div class="collapsed"><span class="content">{{ explanation['background'][key]|safe if explanation is defined else value['text'] }}</span></div>
                     </label>
                 {% endfor %}
             </div>
         {% endif %}
         <div class="history">
             {% for utterance in history %}
-            <p class="utterance"><span class="author">{{ 'you' if (loop.length - loop.index0) is divisibleby 2 else 'bot' }}</span>: <span class="content">{{ explanation['history'][loop.index0]|safe if explanation is defined else utterance }}</span></p>
+            <p class="utterance"><span class="author">{{ 'you' if (loop.length - loop.index0) is divisibleby 2 else 'bot' }}</span>: <span class="content">{{ explanation['history'][loop.index0]|safe if explanation is defined else (history_annotated[loop.index0]|safe if history_annotated is defined else utterance) }}</span></p>
             {% endfor %}
         </div>
         <form action="/ask" method="post">

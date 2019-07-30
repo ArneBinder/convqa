@@ -16,6 +16,17 @@ div.history {
     /* background-color: rgb(255,calc(256 - attr(attribution number) * 256), calc(256 - attr(attribution number) * 256)) */
 }
 
+span.named-entity {
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+    padding: 1px 3px 2px;
+    font-weight: bold;
+    color: #ffffff;
+    font-variant: small-caps;
+    white-space: nowrap;
+    background-color: #87A1A8;
+    border-radius: 3px;
+}
+
 body {
   font-family: "FF Bauer Grotesk Regular", Open Sans, sans-serif;
 }
