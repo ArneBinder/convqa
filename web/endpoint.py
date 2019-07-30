@@ -184,7 +184,7 @@ def ask():
         # create required format of context: dict with entry_id -> list of sentences (strings)
         #if isinstance(params.get('background', None), str):
         #    params['background'] = {'user': params['background']}
-        background = params.get('background', None)
+        background = params.get('background', None) if params.get('keep_background', False) else None
         if isinstance(background, str):
             if background == '':
                 background = None
@@ -194,7 +194,8 @@ def ask():
         if not params.get('dont_fetch', False):
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
-                background = context_fetcher(' '.join(history), previous_context=background)
+                # use only the considered history to query background
+                background = context_fetcher(' '.join(history[-(2 * args.max_history + 1):]), previous_context=background)
             except AssertionError as e:
                 logger.warning(e)
                 pass
