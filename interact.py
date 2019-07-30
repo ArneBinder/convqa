@@ -69,7 +69,8 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), current_output=None, explain=False):
+def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), current_output=None,
+                    explain=False, replace_unknown=False):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
@@ -174,6 +175,9 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
             eos = prev.item()
             break
         current_output.append(prev.item())
+
+    if current_output == tokenizer.encode('unknown'):
+        current_output = tokenizer.encode('i don\'t know')
 
     if explain:
         return current_output, eos, last_ids, explanations

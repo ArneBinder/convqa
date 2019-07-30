@@ -215,9 +215,12 @@ def ask():
         # predict only if any history / user_input (was added to history) is available
         if len(history) > 0:
             if params.get('explain', False):
-                out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                                            history=history_encoded, tokenizer=tokenizer, model=model,
-                                                            args=args, explain=params.get('explain', False))
+                out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded,
+                                                                       personality=personality_encoded,
+                                                                       history=history_encoded, tokenizer=tokenizer,
+                                                                       model=model, args=args,
+                                                                       explain=params.get('explain', False),
+                                                                       replace_unknown=True)
                 explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
                 # add prediction
                 explanations_list[-1] = (explanations_list[-1][0],
@@ -235,7 +238,8 @@ def ask():
                     out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
                                                    history=history_encoded, #[-(2 * args.max_history + 1):],
                                                    tokenizer=tokenizer, model=model, args=args,
-                                                   explain=params.get('explain', False))
+                                                   explain=params.get('explain', False),
+                                                   replace_unknown=True)
 
             history_encoded.append(out_ids)
             params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
