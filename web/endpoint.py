@@ -271,7 +271,7 @@ def ask():
             logger.debug('predicted:\n%s' % params['prediction'])
 
             # add annotations only when not explaining
-            if not params.get('explain', False):
+            if not params.get('explain', False) and params['background'] is not None:
                 pos_start = 0
                 params['history_annotated'] = []
                 for h in params['history']:
