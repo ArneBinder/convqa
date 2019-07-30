@@ -87,7 +87,11 @@ def hello_world():
 
 
 def token_to_html(token, color):
-    return '<span style="background-color:rgb(265, %i, %i)">%s</span>' % (color, color, html.escape(token))
+    return '<span class="context" style="background-color:rgb(265, %i, %i)">%s</span>' % (color, color, html.escape(token))
+
+
+def token_to_html_not_working(token, attribution):
+    return f'<span class="context" attribution="{attribution}">{html.escape(token)}</span>'
 
 
 def visualize_explanation(tokens, expl, split_tokens=(), return_tuples=False):
@@ -216,7 +220,7 @@ def ask():
                 explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
                 # add prediction
                 explanations_list[-1] = (explanations_list[-1][0],
-                                         f'<span style="background-color:DodgerBlue ">{tokenizer.decode(out_ids)}</span>')
+                                         f'<span class="prediction">{tokenizer.decode(out_ids)}</span>')
                 params['explanation'] = {'history': [], 'background': {}}
                 n_background = 0
                 for special_token, expl_html in explanations_list:
