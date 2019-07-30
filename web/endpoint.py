@@ -229,6 +229,9 @@ def ask():
             params['background'] = background
         else:
             background_keys = []
+            if 'background' in params:
+                # delete for html template
+                del params['background']
 
         personality_encoded = None
         if 'personality' in params:
@@ -271,7 +274,7 @@ def ask():
             logger.debug('predicted:\n%s' % params['prediction'])
 
             # add annotations only when not explaining
-            if not params.get('explain', False) and params['background'] is not None:
+            if not params.get('explain', False) and params.get('background', None) is not None:
                 pos_start = 0
                 params['history_annotated'] = []
                 for h in params['history']:
