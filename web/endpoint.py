@@ -219,9 +219,12 @@ def ask():
             try:
                 # use only the considered history to query background
                 background = context_fetcher(' '.join(history[-(2 * args.max_history + 1):]), previous_context=background)
+            except InvalidUsage as e:
+                response = e.to_dict()
+                response['status_code'] = e.status_code
+                logger.warning(f'context_fetcher exception: {response}')
             except AssertionError as e:
                 logger.warning(e)
-                pass
 
         background_encoded = None
         if background is not None and len(background) > 0:
@@ -349,6 +352,8 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
         query = {'text': s, "language": {"lang": "en"}}
         files = {'query': (None, json.dumps(query))}
         response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
+        if response.status_code != 200:
+            raise InvalidUsage(message=response.text, status_code=response.status_code, payload=files)
         response_data = json.loads(response.text)
         if len(response_data.get('entities', [])) > 0:
             for entity in response_data['entities']:
