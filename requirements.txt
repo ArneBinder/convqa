@@ -5,10 +5,10 @@
 # To use openai-gpt model, install spacy model for tokenization:
 #   python -m spacy download en
 #
-# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install its branch "attention":
+# To use gpt2 model, do not install pytorch-pretrained-bert via conda, but install a certain version from history:
 #   git clone https://github.com/huggingface/pytorch-pretrained-BERT.git
 #   cd pytorch-pretrained-BERT
-#   git checkout attention
+#   git reset --hard 2d6a53490dcb194b0a06edcd899a141c7ae12b01
 #   pip install .
 #
 # Eventually, install Apex to speed up training/lower resource consumption (FP16, distributed, ...),
