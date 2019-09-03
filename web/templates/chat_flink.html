@@ -6,12 +6,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
     <script type="text/javascript" charset="utf-8">
         $(document).ready(function() {
+            console.log('Async mode is: {{ async_mode }}')
+
             // Use a "/test" namespace.
             // An application can open a connection on multiple namespaces, and
             // Socket.IO will multiplex all those connections on a single
             // physical channel. If you don't care about multiple channels, you
             // can set the namespace to an empty string.
-            namespace = '/convqa';
+            namespace = "{{ namespace }}";
 
             // Connect to the Socket.IO server.
             // The connection URL has the following format, relative to the current page:
@@ -29,48 +31,31 @@
             // The callback function is invoked whenever the server emits data
             // to the client. The data is then displayed in the "Received"
             // section of the page.
-            socket.on('my_response', function(msg, cb) {
+            socket.on('system_message', function(msg, cb) {
                 //console.log(msg);
-                $('#log').append('<br>' + $('<div/>').text('my_response: ' + msg.data).html());
+                $('#chat').append('<br>' + $('<div/>').text('system: ' + msg.data).html());
+                if (cb)
+                    cb();
+            });
+            socket.on('log', function(msg, cb) {
+                console.log(msg);
                 if (cb)
                     cb();
             });
 
-            // Event handler for server sent data.
-            // The callback function is invoked whenever the server emits data
-            // to the client. The data is then displayed in the "Received"
-            // section of the page.
+
+            socket.on('question', function(msg, cb) {
+                console.log(msg);
+                $('#chat').append('<br>' + $('<div/>').text('question: ' + msg.question).html());
+                if (cb)
+                    cb();
+            });
             socket.on('answer', function(msg, cb) {
                 console.log(msg);
-                $('#log').append('<br>' + $('<div/>').text('answer: ' + msg.prediction).html());
+                $('#chat').append('<br>' + $('<div/>').text('answer: ' + msg.prediction).html());
                 if (cb)
                     cb();
             });
-
-            /*
-            // Interval function that tests message latency by sending a "ping"
-            // message. The server then responds with a "pong" message and the
-            // round trip time is measured.
-            var ping_pong_times = [];
-            var start_time;
-            window.setInterval(function() {
-                start_time = (new Date).getTime();
-                socket.emit('my_ping');
-            }, 1000);
-
-            // Handler for the "pong" message. When the pong is received, the
-            // time from the ping is stored, and the average of the last 30
-            // samples is average and displayed.
-            socket.on('my_pong', function() {
-                var latency = (new Date).getTime() - start_time;
-                ping_pong_times.push(latency);
-                ping_pong_times = ping_pong_times.slice(-30); // keep last 30 samples
-                var sum = 0;
-                for (var i = 0; i < ping_pong_times.length; i++)
-                    sum += ping_pong_times[i];
-                $('#ping-pong').text(Math.round(10 * sum / ping_pong_times.length) / 10);
-            });
-            */
 
             // Handlers for the different forms in the page.
             // These accept data from the user and send it to the server in a
@@ -112,8 +97,6 @@
 </head>
 <body>
     <h1>Flask-SocketIO Test</h1>
-    <p>Async mode is: <b>{{ async_mode }}</b></p>
-    <p>Average ping/pong latency: <b><span id="ping-pong"></span>ms</b></p>
     <h2>Send:</h2>
     <form id="emit" method="POST" action='#'>
         <input type="text" name="emit_data" id="emit_data" placeholder="Message">
@@ -147,7 +130,7 @@
     <form id="disconnect" method="POST" action="#">
         <input type="submit" value="Disconnect">
     </form>
-    <h2>Receive:</h2>
-    <div id="log"></div>
+    <h2>Chat:</h2>
+    <div id="chat"></div>
 </body>
 </html>
