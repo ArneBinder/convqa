@@ -43,12 +43,14 @@ def get_room():
 
 @socketio.on('ask', namespace=NAMESPACE)
 def ask(message):
-    message_data = message['data']
+    #message_data = message['data']
+    print(f'message: {message}')
     room = get_room()
     #user_room = request.sid
     #print(f'message_data: {message_data} (room: {user_room})')
-    emit('question', {'question': message['data']}, room=room)
-    emit('answer', {'user_input': message_data, 'channel': QUEUE_EXT}, room=room)
+    emit('question', {'question': message['user_input']}, room=room)
+    message['channel'] = QUEUE_EXT
+    emit('answer', message, room=room)
 
 
 @socketio.on('send_message', namespace=NAMESPACE)
