@@ -1,0 +1,74 @@
+div.history {
+
+}
+
+.utterance .utt-content {
+    font-weight: bold;
+}
+
+.history .utt-content .prediction {
+    background-color: DodgerBlue;
+}
+
+.history .utt-content .context {
+    /* TODO: 256, 256 - attribution / 256, 256 - attribution / 256 */
+    /* calc(256 - attr(attribution, 0.0) * 256) */
+    /* background-color: rgb(255,calc(256 - attr(attribution number) * 256), calc(256 - attr(attribution number) * 256)) */
+}
+
+span.named-entity {
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+    padding: 1px 3px 2px;
+    font-weight: bold;
+    color: #ffffff;
+    font-variant: small-caps;
+    white-space: nowrap;
+    background-color: #87A1A8;
+    border-radius: 3px;
+}
+
+body {
+  font-family: "FF Bauer Grotesk Regular", Open Sans, sans-serif;
+}
+
+.collapsible {
+  display: block;
+  margin-bottom: 1rem;
+}
+.collapsible input {
+  position: absolute;
+  left: -9999px;
+}
+.collapsible input:focus ~ .collapser {
+  border-color: grey;
+}
+.collapsible .collapser {
+  cursor: pointer;
+  border: 1px transparent dotted;
+}
+.collapsible .arrow {
+  margin-right: 0.3em;
+  display: inline-block;
+  transition: transform 0.25s ease-out;
+}
+.collapsible input:checked ~ .arrow,
+.collapsible input:checked ~ .collapser .arrow {
+  transform: rotate(90deg);
+}
+.collapsible .collapsed {
+  font-size: 0;
+  margin: 0;
+  opacity: 0;
+  padding: 0;
+  /* fade out, then shrink */
+  transition: opacity 0.25s, margin 0.5s 0.25s, font-size 0.5s 0.25s, padding 0.5s 0.25s;
+}
+.collapsible input:checked ~ .collapsed {
+  font-size: 16px;
+  opacity: 1;
+  height: auto;
+  padding: 5px 0;
+  /* grow, then fade in */
+  transition: margin 0.25s, padding 0.25s, font-size 0.25s, opacity 0.5s 0.25s;
+}
+
