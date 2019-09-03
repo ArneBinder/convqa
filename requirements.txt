@@ -26,3 +26,5 @@ pytorch-pretrained-bert >= 0.6.2
 tensorboardX
 tensorflow  # for tensorboardX
 flask # for interact endpoint
+flask-socketio # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
+kafka-python # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
