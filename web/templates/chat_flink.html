@@ -56,40 +56,28 @@
                 if (cb)
                     cb();
             });
+            socket.on('message', function(msg, cb) {
+                console.log(msg);
+                $('#chat').append('<br>' + $('<div/>').text('message: ' + msg).html());
+            });
 
             // Handlers for the different forms in the page.
             // These accept data from the user and send it to the server in a
             // variety of ways
-            $('form#emit').submit(function(event) {
-                socket.emit('my_event', {data: $('#emit_data').val()});
+            $('form#send').submit(function(event) {
+                socket.emit('send_message', {data: $('#send_data').val()});
                 return false;
             });
             $('form#ask').submit(function(event) {
                 socket.emit('ask', {data: $('#ask_data').val()});
                 return false;
             });
-            $('form#broadcast').submit(function(event) {
-                socket.emit('my_broadcast_event', {data: $('#broadcast_data').val()});
-                return false;
-            });
-            $('form#join').submit(function(event) {
-                socket.emit('join', {room: $('#join_room').val()});
-                return false;
-            });
             $('form#leave').submit(function(event) {
-                socket.emit('leave', {room: $('#leave_room').val()});
+                socket.emit('leave');
                 return false;
             });
-            $('form#send_room').submit(function(event) {
-                socket.emit('my_room_event', {room: $('#room_name').val(), data: $('#room_data').val()});
-                return false;
-            });
-            $('form#close').submit(function(event) {
-                socket.emit('close_room', {room: $('#close_room').val()});
-                return false;
-            });
-            $('form#disconnect').submit(function(event) {
-                socket.emit('disconnect_request');
+            $('form#enter').submit(function(event) {
+                socket.emit('enter', {room: $('#enter_room').val()});
                 return false;
             });
         });
@@ -98,37 +86,20 @@
 <body>
     <h1>Flask-SocketIO Test</h1>
     <h2>Send:</h2>
-    <form id="emit" method="POST" action='#'>
-        <input type="text" name="emit_data" id="emit_data" placeholder="Message">
+    <form id="send" method="POST" action='#'>
+        <input type="text" name="send_data" id="send_data" placeholder="Message">
         <input type="submit" value="Echo">
     </form>
     <form id="ask" method="POST" action='#'>
         <input type="text" name="ask_data" id="ask_data" placeholder="Question">
         <input type="submit" value="Ask">
     </form>
-    <form id="broadcast" method="POST" action='#'>
-        <input type="text" name="broadcast_data" id="broadcast_data" placeholder="Message">
-        <input type="submit" value="Broadcast">
-    </form>
-    <form id="join" method="POST" action='#'>
-        <input type="text" name="join_room" id="join_room" placeholder="Room Name">
-        <input type="submit" value="Join Room">
+    <form id="enter" method="POST" action='#'>
+        <input type="text" name="enter_room" id="enter_room" placeholder="Room Name">
+        <input type="submit" value="Enter Room">
     </form>
     <form id="leave" method="POST" action='#'>
-        <input type="text" name="leave_room" id="leave_room" placeholder="Room Name">
         <input type="submit" value="Leave Room">
-    </form>
-    <form id="send_room" method="POST" action='#'>
-        <input type="text" name="room_name" id="room_name" placeholder="Room Name">
-        <input type="text" name="room_data" id="room_data" placeholder="Message">
-        <input type="submit" value="Send to Room">
-    </form>
-    <form id="close" method="POST" action="#">
-        <input type="text" name="close_room" id="close_room" placeholder="Room Name">
-        <input type="submit" value="Close Room">
-    </form>
-    <form id="disconnect" method="POST" action="#">
-        <input type="submit" value="Disconnect">
     </form>
     <h2>Chat:</h2>
     <div id="chat"></div>

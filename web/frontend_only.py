@@ -5,7 +5,7 @@ from flask import Flask, render_template, session, request, \
     copy_current_request_context
 
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
-    close_room, rooms, disconnect
+    close_room, rooms, disconnect, send
 
 from web.kafka_channels_manager import KafkaChannelsManager
 
@@ -32,18 +32,28 @@ def index():
     return render_template('chat_flink.html', async_mode=socketio.async_mode, namespace=NAMESPACE)
 
 
+def get_room():
+    room = None
+    for r in rooms():
+        if r != request.sid:
+            assert room is None, 'too many rooms available'
+            room = r
+    return room or request.sid
+
+
 @socketio.on('ask', namespace=NAMESPACE)
 def ask(message):
     message_data = message['data']
+    room = get_room()
     #user_room = request.sid
     #print(f'message_data: {message_data} (room: {user_room})')
-    emit('question', {'question': message['data']})
-    emit('answer', {'user_input': message_data, 'channel': QUEUE_EXT})
+    emit('question', {'question': message['data']}, room=room)
+    emit('answer', {'user_input': message_data, 'channel': QUEUE_EXT}, room=room)
 
 
-@socketio.on('my_event', namespace=NAMESPACE)
-def echo_message(message):
-    emit('system_message', {'data': message['data']})
+@socketio.on('send_message', namespace=NAMESPACE)
+def send_message(message):
+    send(message['data'], room=get_room())
 
 
 @socketio.on('my_broadcast_event', namespace=NAMESPACE)
@@ -57,10 +67,25 @@ def join(message):
     emit('system_message', {'data': 'In rooms: ' + ', '.join(rooms())})
 
 
+@socketio.on('enter', namespace=NAMESPACE)
+def enter(message):
+    left = []
+    for room in list(rooms()):
+        if room != request.sid:
+            left.append(room)
+            leave_room(room)
+    join_room(message['room'])
+    emit('system_message', {'data': 'left rooms: ' + ', '.join(left) + ', joined room: ' + message['room']})
+
+
 @socketio.on('leave', namespace=NAMESPACE)
-def leave(message):
-    leave_room(message['room'])
-    emit('system_message', {'data': 'In rooms: ' + ', '.join(rooms())})
+def leave():
+    room = get_room()
+    if room != request.sid:
+        leave_room(room)
+        emit('system_message', {'data': 'left room: ' + room})
+    else:
+        emit('system_message', {'data': 'you are in no room'})
 
 
 @socketio.on('close_room', namespace=NAMESPACE)
