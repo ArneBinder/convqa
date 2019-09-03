@@ -2,6 +2,8 @@
 <html>
 <head>
     <title>Flask-SocketIO Test</title>
+    <meta charset="UTF-8"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat_flink.css') }}"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.js" integrity="sha256-iT6Q9iMJYuQiMWNd9lDyBUStIq/8PuOW33aOqmvFpqI=" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
     <script type="text/javascript" charset="utf-8">
@@ -33,7 +35,7 @@
             // section of the page.
             socket.on('system_message', function(msg, cb) {
                 //console.log(msg);
-                $('#chat').append('<p><span class="msg-type">system</span>: <span class="msg-content-system">' + msg.data + '</span></p>');
+                $('#chat').append('<p><span class="utt-author">system</span>: <span class="utt-content">' + msg.data + '</span></p>');
                 if (cb)
                     cb();
             });
@@ -46,32 +48,36 @@
 
             socket.on('question', function(msg, cb) {
                 console.log(msg);
-                $('#chat').append('<p><span class="msg-type">question</span>: <span class="msg-content">' + msg.question + '</span></p>');
+                $('#chat').append('<p class="utterance"><span class="utt-author">question</span>: <span class="utt-content">' + msg.question + '</span></p>');
                 if (cb)
                     cb();
             });
             socket.on('answer', function(msg, cb) {
                 console.log(msg);
-                $('#chat').append('<p><span class="msg-type">answer</span>: <span class="msg-content">' + msg.prediction + '</span></p>');
+                // TODO: handle background
+                // TODO: handle explanations (also contains background)
+                $('#chat').append('<p class="utterance"><span class="utt-author">answer</span>: <span class="utt-content">' + msg.prediction + '</span></p>');
                 if (cb)
                     cb();
             });
             socket.on('message', function(msg, cb) {
                 console.log(msg);
-                $('#chat').append('<p><span class="msg-type">message</span>: <span class="msg-content">' + msg + '</span></p>');
+                $('#chat').append('<p class="utterance"><span class="utt-author">message</span>: <span class="utt-content">' + msg + '</span></p>');
             });
 
             // Handlers for the different forms in the page.
             // These accept data from the user and send it to the server in a
             // variety of ways
-            $('form#send').submit(function(event) {
-                socket.emit('send_message', {data: $('#send_data').val()});
-                return false;
-            });
-            $('form#ask').submit(function(event) {
-                var history = $('#chat .msg-content').toArray().map(function(i){ return i.innerText })
-                socket.emit('ask', {user_input: $('#ask_data').val(), history: history});
-                return false;
+            $('form#ask').on("click", ":submit", function(event) {
+                var explain = $('#explain').is(":checked");
+                var action = $(this).val();
+                if (action == 'ask'){
+                    var history = $('#chat .utterance .utt-content').toArray().map(function(i){ return i.innerText })
+                    socket.emit('ask', {user_input: $('#ask_data').val(), history: history, explain: explain});
+                 } else {
+                    socket.emit('send_message', {data: $('#ask_data').val()});
+                 }
+                 return false;
             });
             $('form#leave').submit(function(event) {
                 socket.emit('leave');
@@ -85,16 +91,7 @@
     </script>
 </head>
 <body>
-    <h1>Flask-SocketIO Test</h1>
-    <h2>Send:</h2>
-    <form id="send" method="POST" action='#'>
-        <input type="text" name="send_data" id="send_data" placeholder="Message">
-        <input type="submit" value="Echo">
-    </form>
-    <form id="ask" method="POST" action='#'>
-        <input type="text" name="ask_data" id="ask_data" placeholder="Question">
-        <input type="submit" value="Ask">
-    </form>
+    <h1>Chatty Chat</h1>
     <form id="enter" method="POST" action='#'>
         <input type="text" name="enter_room" id="enter_room" placeholder="Room Name">
         <input type="submit" value="Enter Room">
@@ -103,6 +100,9 @@
         <input type="submit" value="Leave Room">
     </form>
     <h2>Chat:</h2>
-    <div id="chat"></div>
+    <div id="chat" class="history"></div>
+    <form id="ask" method="POST" action='#'>
+        <input title="enter a question or some random stuff" name="ask_data" id="ask_data" type="text" /><button type="submit" name="action" value="ask">ask</button><button type="submit" name="action" value="send">send</button> <label for="explain">explain<input id="explain" type="checkbox" name="explain"/></label>
+    </form>
 </body>
 </html>
