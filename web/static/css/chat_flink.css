@@ -7,7 +7,7 @@ div.history {
 }
 
 .history .utt-content .prediction {
-    background-color: DodgerBlue;
+    background-color: #6bb6ff; /* DodgerBlue */
 }
 
 .history .utt-content .context {

@@ -56,9 +56,38 @@
             });
             socket.on('answer', function(msg, cb) {
                 console.log(msg);
-                // TODO: handle background
-                // TODO: handle explanations (also contains background)
                 $('#chat').append('<p class="utterance"><span class="utt-author">answer</span>: <span class="utt-content">' + msg.prediction + '</span></p>');
+
+                // get previous history elems
+                var history_old = $('#chat .utterance .utt-content'); //.toArray()
+                console.log(history_old);
+                var history = msg.history;
+                if (!(typeof msg.history_annotated === 'undefined' || msg.history_annotated === null)) {
+                    history = msg.history_annotated;
+                }
+                var background = msg.background;
+                if (msg.explain){
+                    console.log('explain was used');
+                    history = msg.explanation.history;
+                    background = msg.explanation.background;
+                }
+                console.log(history_old.length)
+                console.log(history.length)
+                var offset = history.length - history_old.length
+                for (var i = 0; i < history_old.length; i++) {
+
+                    if (i + offset >= 0){
+                        elem = history[i + offset];
+                    } else {
+                        // take only text from old
+                        elem = '<span class="utt-content-unused">'+ history_old[i].innerText + '</span>';
+                    }
+                    console.log(elem);
+                    history_old.eq(i).html(elem);
+                }
+
+                // TODO: handle background
+
                 if (cb)
                     cb();
             });
@@ -104,7 +133,7 @@
     <h2>Chat:</h2>
     <div id="chat" class="history"></div>
     <form id="ask" method="POST" action='#'>
-        <input title="enter a question or some random stuff" name="ask_data" id="ask_data" type="text" /><button type="submit" name="action" value="ask">ask</button><button type="submit" name="action" value="send">send</button> <label for="explain">explain<input id="explain" type="checkbox" name="explain"/></label>
+        <input title="enter a question or some random stuff" name="ask_data" id="ask_data" type="text" /><button type="submit" name="action" value="ask">send</button>{# <button type="submit" name="action" value="send">send</button> #} <label for="explain">explain<input id="explain" type="checkbox" name="explain"/></label>
     </form>
 </body>
 </html>
