@@ -51,7 +51,8 @@ def get_room():
 @socketio.on('ask', namespace=NAMESPACE)
 def ask(message):
     #message_data = message['data']
-    print(f'message: {message}')
+    if app.config['DEBUG']:
+        print(f'message: {message}')
     room = get_room()
     #user_room = request.sid
     #print(f'message_data: {message_data} (room: {user_room})')
