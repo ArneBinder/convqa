@@ -10,6 +10,10 @@ div.history {
     background-color: #6bb6ff; /* DodgerBlue */
 }
 
+.utt-content-unused {
+    color: grey;
+}
+
 .history .utt-content .context {
     /* TODO: 256, 256 - attribution / 256, 256 - attribution / 256 */
     /* calc(256 - attr(attribution, 0.0) * 256) */

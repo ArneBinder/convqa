@@ -86,7 +86,28 @@
                     history_old.eq(i).html(elem);
                 }
 
-                // TODO: handle background
+                // handle background
+                if (!(typeof background === 'undefined' || background === null)) {
+                    $('#background-container').empty();
+                    for (let [key, value] of Object.entries(background)) {
+                        console.log(key, value);
+                        var text = value
+                        if (!(typeof value.text === 'undefined' || value.text === null)) {
+                            text = value.text
+                        }
+                        $('#background-container').append(
+                            '<label class="collapsible">\
+                                <input type="checkbox" />\
+                                <span class="arrow">></span>\
+                                <span class="collapser"><span class="name">' + key + '</span></span>\
+                                <div class="collapsed"><span class="content">' + text +'</span></div>\
+                            </label>'
+                        );
+                    }
+                    $('#background').show();
+                } else {
+                    $('#background').hide();
+                }
 
                 if (cb)
                     cb();
@@ -130,6 +151,10 @@
     <form id="leave" method="POST" action='#'>
         <input type="submit" value="Leave Room">
     </form>
+    <div id="background" style="display:none">
+        <h2>Queried Background Information</h2>
+        <div id="background-container"></div>
+    </div>
     <h2>Chat:</h2>
     <div id="chat" class="history"></div>
     <form id="ask" method="POST" action='#'>
