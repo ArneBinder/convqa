@@ -24,12 +24,17 @@ app.config['SECRET_KEY'] = 'secret!'
 app.config['DEBUG'] = True
 app.config['PORT'] = 5000
 app.config['HOST'] = '127.0.0.1'
+# connect:
+#   ssh -L 19092:127.0.0.1:9092 gpu0
+# use:
+#   kafka://localhost:19092
+app.config['KAFKA'] = 'kafka://localhost:9092'
 #async_mode = 'threading' if app.config['DEBUG'] else 'eventlet'
 NAMESPACE = '/convqa'
 QUEUE = 'convqa_out'
 QUEUE_EXT = 'convqa_in'
-#socketio = SocketIO(app, async_mode=async_mode)
-socketio = SocketIO(app, async_mode=async_mode, client_manager=KafkaChannelsManager(channel=QUEUE))
+socketio = SocketIO(app, async_mode=async_mode,
+                    client_manager=KafkaChannelsManager(url=app.config['KAFKA'], channel=QUEUE))
 #socketio = SocketIO(app, async_mode='threading', client_manager=KafkaManager(channel='convqa-out'))
 
 
