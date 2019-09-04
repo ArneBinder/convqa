@@ -48,15 +48,9 @@
             });
 
 
-            socket.on('question', function(msg, cb) {
-                console.log(msg);
-                $('#chat').append('<p class="utterance"><span class="utt-author">question</span>: <span class="utt-content-container"><span class="utt-content">' + msg.question + '</span></span></p>');
-                if (cb)
-                    cb();
-            });
             socket.on('answer', function(msg, cb) {
                 console.log(msg);
-                $('#chat').append('<p class="utterance"><span class="utt-author">answer</span>: <span class="utt-content-container"><span class="utt-content">' + msg.prediction + '</span></span></p>');
+                $('#chat').append('<p class="utterance"><span class="utt-author">bot</span>: <span class="utt-content-container"><span class="utt-content">' + msg.prediction + '</span></span></p>');
 
                 // get previous history elems
                 var history_old = $('#chat .utterance .utt-content-container');
@@ -112,8 +106,8 @@
                     cb();
             });
             socket.on('message', function(msg, cb) {
-                console.log(msg);
-                $('#chat').append('<p class="utterance"><span class="utt-author">message</span>: <span class="utt-content-container"><span class="utt-content">' + msg + '</span></span></p>');
+                //console.log(msg);
+                $('#chat').append('<p class="utterance"><span class="utt-author">'+msg.username+'</span>: <span class="utt-content-container"><span class="utt-content">' + msg.data + '</span></span></p>');
             });
 
             // Handlers for the different forms in the page.
@@ -122,11 +116,16 @@
             $('form#ask').on("click", ":submit", function(event) {
                 var explain = $('#explain').is(":checked");
                 var action = $(this).val();
+                var username = $('#username_data').val().trim();
+                if (username == '') {
+                    username = 'you'
+                }
+                console.log(username);
                 if (action == 'ask'){
                     var history = $('#chat .utterance .utt-content').toArray().map(function(i){ return i.innerText })
-                    socket.emit('ask', {user_input: $('#ask_data').val(), history: history, explain: explain});
+                    socket.emit('ask', {user_input: $('#ask_data').val(), history: history, explain: explain, username: username});
                  } else if (action == 'send') {
-                    socket.emit('send_message', {data: $('#ask_data').val()});
+                    socket.emit('send_message', {data: $('#ask_data').val(), username: username});
                  }
                  return false;
             });
@@ -144,10 +143,18 @@
 </head>
 <body>
     <h1>Chatty Chat</h1>
-    <form id="room" method="POST" action='#'>
-        <input type="text" name="enter_room" id="enter_room_data" placeholder="Room Name">
-        <button type="submit" name="action" value="enter">Enter Room</button><button type="submit" name="action" value="leave">Leave Room</button>
-    </form>
+    <div class="input-container">
+        <form id="user">
+            <label for="username_data">username</label>
+            <input name="username" id="username_data">
+        </form>
+        <form id="room" method="POST" action='#'>
+            <label for="enter_room_data">room</label>
+            <input type="text" name="enter_room" id="enter_room_data" placeholder="Room Name">
+            <br/>
+            <button type="submit" name="action" value="enter">Enter Room</button><button type="submit" name="action" value="leave">Leave Room</button>
+        </form>
+    </div>
     <div id="background" style="display:none">
         <h2>Queried Background Information</h2>
         <div id="background-container"></div>

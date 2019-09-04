@@ -50,20 +50,23 @@ def get_room():
 
 @socketio.on('ask', namespace=NAMESPACE)
 def ask(message):
-    #message_data = message['data']
     if app.config['DEBUG']:
         print(f'message: {message}')
     room = get_room()
-    #user_room = request.sid
-    #print(f'message_data: {message_data} (room: {user_room})')
-    emit('question', {'question': message['user_input']}, room=room)
+    m = {'data': message['user_input']}
+    if 'username' in message:
+        m['username'] = message['username']
+    send(m, room=room)
     message['channel'] = QUEUE_EXT
     emit('answer', message, room=room)
 
 
 @socketio.on('send_message', namespace=NAMESPACE)
 def send_message(message):
-    send(message['data'], room=get_room())
+    m = {'data': message['data']}
+    if 'username' in message:
+        m['username'] = message['username']
+    send(m, room=get_room())
 
 
 @socketio.on('my_broadcast_event', namespace=NAMESPACE)
