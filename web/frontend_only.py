@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-import json
+import eventlet
+# has to be executed as early as possible to work
+eventlet.monkey_patch()
 
 from flask import Flask, render_template, session, request, \
     copy_current_request_context
@@ -14,11 +16,15 @@ from web.kafka_channels_manager import KafkaChannelsManager
 # the best option based on installed packages.
 # NOTE: only "threading" works for kafka setting!
 #async_mode = None
-
-async_mode = 'threading'
+#async_mode = 'threading'
+async_mode = 'eventlet'
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
+app.config['DEBUG'] = True
+app.config['PORT'] = 5000
+app.config['HOST'] = '127.0.0.1'
+#async_mode = 'threading' if app.config['DEBUG'] else 'eventlet'
 NAMESPACE = '/convqa'
 QUEUE = 'convqa_out'
 QUEUE_EXT = 'convqa_in'
@@ -29,7 +35,8 @@ socketio = SocketIO(app, async_mode=async_mode, client_manager=KafkaChannelsMana
 
 @app.route('/')
 def index():
-    return render_template('chat_flink.html', async_mode=socketio.async_mode, namespace=NAMESPACE)
+    return render_template('chat_flink.html', async_mode=socketio.async_mode, domain=app.config['HOST'],
+                           port=app.config['PORT'], namespace=NAMESPACE)
 
 
 def get_room():
@@ -125,4 +132,4 @@ def disconnect():
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=app.config["DEBUG"], host=app.config['HOST'], port=app.config["PORT"])
