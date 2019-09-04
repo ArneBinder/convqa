@@ -126,17 +126,18 @@
                 if (action == 'ask'){
                     var history = $('#chat .utterance .utt-content').toArray().map(function(i){ return i.innerText })
                     socket.emit('ask', {user_input: $('#ask_data').val(), history: history, explain: explain});
-                 } else {
+                 } else if (action == 'send') {
                     socket.emit('send_message', {data: $('#ask_data').val()});
                  }
                  return false;
             });
-            $('form#leave').submit(function(event) {
-                socket.emit('leave');
-                return false;
-            });
-            $('form#enter').submit(function(event) {
-                socket.emit('enter', {room: $('#enter_room').val()});
+            $('form#room').on("click", ":submit", function(event) {
+                var action = $(this).val();
+                if (action == 'enter') {
+                    socket.emit('enter', {room: $('#enter_room_data').val()});
+                } else if (action == 'leave') {
+                    socket.emit('leave');
+                }
                 return false;
             });
         });
@@ -144,12 +145,9 @@
 </head>
 <body>
     <h1>Chatty Chat</h1>
-    <form id="enter" method="POST" action='#'>
-        <input type="text" name="enter_room" id="enter_room" placeholder="Room Name">
-        <input type="submit" value="Enter Room">
-    </form>
-    <form id="leave" method="POST" action='#'>
-        <input type="submit" value="Leave Room">
+    <form id="room" method="POST" action='#'>
+        <input type="text" name="enter_room" id="enter_room_data" placeholder="Room Name">
+        <button type="submit" name="action" value="enter">Enter Room</button><button type="submit" name="action" value="leave">Leave Room</button>
     </form>
     <div id="background" style="display:none">
         <h2>Queried Background Information</h2>

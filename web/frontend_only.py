@@ -84,7 +84,10 @@ def enter(message):
             left.append(room)
             leave_room(room)
     join_room(message['room'])
-    emit('system_message', {'data': 'left rooms: ' + ', '.join(left) + ', joined room: ' + message['room']})
+    msg_return = 'joined room: ' + message['room']
+    if len(left) > 0:
+        msg_return = 'left rooms: ' + ', '.join(left) + '; ' + msg_return
+    emit('system_message', {'data': msg_return})
 
 
 @socketio.on('leave', namespace=NAMESPACE)
