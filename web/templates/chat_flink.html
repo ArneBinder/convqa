@@ -20,7 +20,7 @@
             // Connect to the Socket.IO server.
             // The connection URL has the following format, relative to the current page:
             //     http[s]://<domain>:<port>[/<namespace>]
-            var url = "http://{{ domain }}:{{ port }}" + namespace
+            var url = window.location.origin + namespace
             console.log(url)
             var socket = io(url);
 
