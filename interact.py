@@ -247,6 +247,9 @@ def get_args(parser=ArgumentParser(), arguments=()):
     parser.add_argument("--coqa_file", type=str, default="", help="path to a file in the CoQA dataset format containing question where the answers will be predicted")
     parser.add_argument("--prediction_out", type=str, default="", help="path to a file to save the predictions")
 
+    # endpoint
+    parser.add_argument("--port", type=int, default=5000, help="port of the started endpoint")
+
     for parse_arg in arguments:
         parser.add_argument(**parse_arg)
 
