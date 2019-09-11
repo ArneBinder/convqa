@@ -3,7 +3,7 @@ import eventlet
 # has to be executed as early as possible to work
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, session, request, \
+from flask import Flask, render_template, request, \
     copy_current_request_context
 
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
@@ -22,7 +22,7 @@ async_mode = 'eventlet'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.config['DEBUG'] = True
-app.config['PORT'] = 5000
+app.config['PORT'] = 5001
 app.config['HOST'] = '127.0.0.1'
 # connect:
 #   ssh -L 19092:127.0.0.1:9092 gpu0
@@ -143,4 +143,7 @@ def disconnect():
 
 
 if __name__ == '__main__':
+    print('NOTE: pre-requisite for this frontend is a Kafka queue connected to a Flink job that handles the background '
+          'processing.\n The easiest way to achieve that is to start the default endpoint ("python web/endpoint.py ... ") '
+          'and set up https://github.com/ArneBinder/queued-requester according to its readme.')
     socketio.run(app, debug=app.config["DEBUG"], host=app.config['HOST'], port=app.config["PORT"])
