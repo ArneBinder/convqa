@@ -24,7 +24,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.config['DEBUG'] = True
 app.config['PORT'] = 5001
-app.config['HOST'] = '127.0.0.1'
+app.config['HOST'] = '0.0.0.0'
 # connect:
 #   ssh -L 19092:127.0.0.1:9092 gpu0
 # use:
