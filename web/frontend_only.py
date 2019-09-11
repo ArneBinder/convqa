@@ -10,7 +10,7 @@ from flask import Flask, render_template, request, \
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
     close_room, rooms, disconnect, send
 
-from web.kafka_channels_manager import KafkaChannelsManager
+from kafka_channels_manager import KafkaChannelsManager
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
