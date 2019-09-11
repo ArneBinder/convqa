@@ -310,3 +310,10 @@ CUDA_VISIBLE_DEVICES=0 python web/endpoint.py --model gpt2 --model_checkpoint ru
 
 ## discarded
  * evaluate gpt2@personachat: gpt2 does not work together with parlai.core.agents.Agent
+ 
+ 
+ 
+ 
+### meeting stefan
+ 1) implement argmax generation
+ 2) 

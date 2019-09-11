@@ -3,6 +3,7 @@ import eventlet
 # has to be executed as early as possible to work
 eventlet.monkey_patch()
 
+import os
 from flask import Flask, render_template, request, \
     copy_current_request_context
 
@@ -29,18 +30,21 @@ app.config['HOST'] = '127.0.0.1'
 # use:
 #   kafka://localhost:19092
 app.config['KAFKA'] = 'kafka://localhost:9092'
-#async_mode = 'threading' if app.config['DEBUG'] else 'eventlet'
-NAMESPACE = '/convqa'
-QUEUE = 'convqa_out'
-QUEUE_EXT = 'convqa_in'
+app.config['WS_NAMESPACE'] = '/convqa'
+app.config['KAFKA_TOPIC'] = 'convqa_out'
+app.config['KAFKA_TOPIC_PROCESS_EXTERNAL'] = 'convqa_in'
+if os.getenv('CONVQA_FRONTEND_SETTINGS', '') != '':
+    # note: the path in CONVQA_FRONTEND_SETTINGS has to be relative to this script (frontend_only.py)
+    print(f'load config from "{os.getenv("CONVQA_FRONTEND_SETTINGS")}"')
+    app.config.from_envvar('CONVQA_FRONTEND_SETTINGS')
 socketio = SocketIO(app, async_mode=async_mode,
-                    client_manager=KafkaChannelsManager(url=app.config['KAFKA'], channel=QUEUE))
+                    client_manager=KafkaChannelsManager(url=app.config['KAFKA'], channel=app.config['KAFKA_TOPIC']))
 #socketio = SocketIO(app, async_mode='threading', client_manager=KafkaManager(channel='convqa-out'))
 
 
 @app.route('/')
 def index():
-    return render_template('chat_flink.html', async_mode=socketio.async_mode, namespace=NAMESPACE)
+    return render_template('chat_flink.html', async_mode=socketio.async_mode, namespace=app.config['WS_NAMESPACE'])
 
 
 def get_room():
@@ -52,7 +56,7 @@ def get_room():
     return room or request.sid
 
 
-@socketio.on('ask', namespace=NAMESPACE)
+@socketio.on('ask', namespace=app.config['WS_NAMESPACE'])
 def ask(message):
     if app.config['DEBUG']:
         print(f'message: {message}')
@@ -61,11 +65,11 @@ def ask(message):
     if 'username' in message:
         m['username'] = message['username']
     send(m, room=room)
-    message['channel'] = QUEUE_EXT
+    message['channel'] = app.config['KAFKA_TOPIC_PROCESS_EXTERNAL']
     emit('answer', message, room=room)
 
 
-@socketio.on('send_message', namespace=NAMESPACE)
+@socketio.on('send_message', namespace=app.config['WS_NAMESPACE'])
 def send_message(message):
     m = {'data': message['data']}
     if 'username' in message:
@@ -73,18 +77,18 @@ def send_message(message):
     send(m, room=get_room())
 
 
-@socketio.on('my_broadcast_event', namespace=NAMESPACE)
+@socketio.on('my_broadcast_event', namespace=app.config['WS_NAMESPACE'])
 def broadcast_message(message):
     emit('system_message', {'data': message['data']}, broadcast=True)
 
 
-@socketio.on('join', namespace=NAMESPACE)
+@socketio.on('join', namespace=app.config['WS_NAMESPACE'])
 def join(message):
     join_room(message['room'])
     emit('system_message', {'data': 'In rooms: ' + ', '.join(rooms())})
 
 
-@socketio.on('enter', namespace=NAMESPACE)
+@socketio.on('enter', namespace=app.config['WS_NAMESPACE'])
 def enter(message):
     left = []
     for room in list(rooms()):
@@ -98,7 +102,7 @@ def enter(message):
     emit('system_message', {'data': msg_return})
 
 
-@socketio.on('leave', namespace=NAMESPACE)
+@socketio.on('leave', namespace=app.config['WS_NAMESPACE'])
 def leave():
     room = get_room()
     if room != request.sid:
@@ -108,18 +112,18 @@ def leave():
         emit('system_message', {'data': 'you are in no room'})
 
 
-@socketio.on('close_room', namespace=NAMESPACE)
+@socketio.on('close_room', namespace=app.config['WS_NAMESPACE'])
 def close(message):
     emit('system_message', {'data': 'Room ' + message['room'] + ' is closing.'}, room=message['room'])
     close_room(message['room'])
 
 
-@socketio.on('my_room_event', namespace=NAMESPACE)
+@socketio.on('my_room_event', namespace=app.config['WS_NAMESPACE'])
 def send_room_message(message):
     emit('system_message', {'data': message['data']}, room=message['room'])
 
 
-@socketio.on('disconnect_request', namespace=NAMESPACE)
+@socketio.on('disconnect_request', namespace=app.config['WS_NAMESPACE'])
 def disconnect_request():
     @copy_current_request_context
     def can_disconnect():
@@ -131,13 +135,13 @@ def disconnect_request():
     emit('system_message', {'data': 'Disconnected!'}, callback=can_disconnect)
 
 
-@socketio.on('connect', namespace=NAMESPACE)
+@socketio.on('connect', namespace=app.config['WS_NAMESPACE'])
 def connect():
     print('Client connected')
     emit('system_message', {'data': 'Connected'})
 
 
-@socketio.on('disconnect', namespace=NAMESPACE)
+@socketio.on('disconnect', namespace=app.config['WS_NAMESPACE'])
 def disconnect():
     print('Client disconnected', request.sid)
 
