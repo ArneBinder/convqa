@@ -44,7 +44,8 @@ socketio = SocketIO(app, async_mode=async_mode,
 
 @app.route('/')
 def index():
-    return render_template('chat_flink.html', async_mode=socketio.async_mode, namespace=app.config['WS_NAMESPACE'])
+    return render_template('chat_flink.html', async_mode=socketio.async_mode,
+                           namespace=app.config.get('WS_NAMESPACE_EXTERNAL', app.config['WS_NAMESPACE']))
 
 
 def get_room():
