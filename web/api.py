@@ -15,8 +15,10 @@ import time
 import traceback
 from collections import defaultdict
 
+import eventlet
 import requests
 import torch
+from eventlet import wsgi
 from flask import Flask, jsonify, Response, request, render_template
 
 # Add the parent folder path to the sys.path list
@@ -26,7 +28,7 @@ from interact import get_args, load_model, sample_sequence, norm_expl
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
 #endpoint = Flask(__name__, static_url_path='')
-endpoint = Flask(__name__)
+app = Flask(__name__)
 #cors = CORS(endpoint)
 
 
@@ -46,7 +48,7 @@ class InvalidUsage(Exception):
         return rv
 
 
-@endpoint.errorhandler(InvalidUsage)
+@app.errorhandler(InvalidUsage)
 def handle_invalid_usage(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
@@ -81,7 +83,7 @@ def get_params():
     return params
 
 
-@endpoint.route("/hello_world")
+@app.route("/hello_world")
 def hello_world():
     return "Hello World!"
 
@@ -184,7 +186,7 @@ def insert_annotations(s, annotations, offset=0, exclude_key='text'):
     return res
 
 
-@endpoint.route("/ask", methods=['GET', 'POST'])
+@app.route("/ask", methods=['GET', 'POST'])
 def ask():
     try:
         start = time.time()
@@ -302,7 +304,7 @@ def ask():
     return response
 
 
-@endpoint.route("/reload", methods=['GET', 'POST'])
+@app.route("/reload", methods=['GET', 'POST'])
 def reload_model():
     global model, tokenizer
     try:
@@ -431,5 +433,8 @@ if __name__ == "__main__":
         context_fetcher = None
 
     logger.info('Starting the API')
-    # endpoint.static = 'static'
-    endpoint.run(host='0.0.0.0', port=args.port)#, debug=True)
+    if args.deploy:
+        logger.info('use deployment server')
+        wsgi.server(eventlet.listen(('', args.port)), app)
+    else:
+        app.run(host='0.0.0.0', port=args.port, debug=True)
