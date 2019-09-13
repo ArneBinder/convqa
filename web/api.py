@@ -88,6 +88,11 @@ def hello_world():
     return "Hello World!"
 
 
+@app.route("/")
+def hello_world2():
+    return hello_world()
+
+
 def token_to_html(token, color):
     return '<span class="context" style="background-color:rgb(265, %i, %i)">%s</span>' % (color, color, html.escape(token))
 

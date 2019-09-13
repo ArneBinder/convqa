@@ -33,7 +33,7 @@ app.config['KAFKA'] = 'kafka://localhost:9092'
 app.config['WS_NAMESPACE'] = '/convqa'
 app.config['KAFKA_TOPIC'] = 'convqa_out'
 app.config['KAFKA_TOPIC_PROCESS_EXTERNAL'] = 'convqa_in'
-app.config['ROOT'] = ''  # evtl use: '/backend'
+app.config['ROOT'] = ''  # evtl use: 'backend/'
 if os.getenv('CONVQA_FRONTEND_SETTINGS', '') != '':
     # note: the path in CONVQA_FRONTEND_SETTINGS has to be relative to this script (frontend_only.py)
     print(f'load config from "{os.getenv("CONVQA_FRONTEND_SETTINGS")}"')

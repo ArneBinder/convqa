@@ -3,7 +3,7 @@
 <head>
     <title>Flask-SocketIO Test</title>
     <meta charset="UTF-8"/>
-    <link rel="stylesheet" href="{{ url_for('static', filename=root+'css/chat_flink.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat_flink.css') }}"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.js" integrity="sha256-iT6Q9iMJYuQiMWNd9lDyBUStIq/8PuOW33aOqmvFpqI=" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
     <script type="text/javascript" charset="utf-8">
@@ -23,7 +23,7 @@
             var url = window.location.origin + namespace
             console.log(url)
 	        console.log('root path: {{ root }}')
-            var socket = io(url, {path: '{{ root }}/socket.io'});
+            var socket = io(url, {path: '/{{ root }}socket.io'});
 
             // Event handler for new connections.
             // The callback function is invoked when a connection with the
