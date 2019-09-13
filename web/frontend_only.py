@@ -33,6 +33,7 @@ app.config['KAFKA'] = 'kafka://localhost:9092'
 app.config['WS_NAMESPACE'] = '/convqa'
 app.config['KAFKA_TOPIC'] = 'convqa_out'
 app.config['KAFKA_TOPIC_PROCESS_EXTERNAL'] = 'convqa_in'
+app.config['SOCKETIO_PATH'] = '/socket.io'
 if os.getenv('CONVQA_FRONTEND_SETTINGS', '') != '':
     # note: the path in CONVQA_FRONTEND_SETTINGS has to be relative to this script (frontend_only.py)
     print(f'load config from "{os.getenv("CONVQA_FRONTEND_SETTINGS")}"')
@@ -45,7 +46,7 @@ socketio = SocketIO(app, async_mode=async_mode,
 @app.route('/')
 def index():
     return render_template('chat_flink.html', async_mode=socketio.async_mode,
-                           namespace=app.config.get('WS_NAMESPACE_EXTERNAL', app.config['WS_NAMESPACE']))
+                           namespace=app.config['WS_NAMESPACE'], socketio_path=app.config['SOCKETIO_PATH'])
 
 
 def get_room():
