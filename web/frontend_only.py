@@ -45,7 +45,7 @@ socketio = SocketIO(app, async_mode=async_mode,
 
 @app.route('/')
 def index():
-    return render_template('chat_flink.html', async_mode=socketio.async_mode,
+    return render_template('chat_ws.html', async_mode=socketio.async_mode,
                            namespace=app.config['WS_NAMESPACE'], root=app.config['ROOT'])
 
 

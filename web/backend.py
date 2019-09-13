@@ -297,7 +297,7 @@ def ask():
             json_data = json.dumps(params)
             response = Response(json_data, mimetype=http_accept)
         else:
-            response = Response(render_template('chat.html', **params), mimetype='text/html')
+            response = Response(render_template('chat.html', root=args.root, **params), mimetype='text/html')
 
         logger.info("Time spent handling the request: %f" % (time.time() - start))
     except Exception as e:

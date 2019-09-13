@@ -250,6 +250,8 @@ def get_args(parser=ArgumentParser(), arguments=()):
     # api
     parser.add_argument("--port", type=int, default=5000, help="port of the started endpoint")
     parser.add_argument("--deploy", action="store_true", help="create a wsgi deployment server")
+    parser.add_argument("--root", type=str, default='', help='if started behind a reverse proxy, '
+                                                             'use e.g. "--root backend/"')
 
     for parse_arg in arguments:
         parser.add_argument(**parse_arg)

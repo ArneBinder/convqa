@@ -25,7 +25,7 @@
             <p class="utterance"><span class="author">{{ 'you' if (loop.length - loop.index0) is divisibleby 2 else 'bot' }}</span>: <span class="content">{{ explanation['history'][loop.index0]|safe if explanation is defined else (history_annotated[loop.index0]|safe if history_annotated is defined else utterance) }}</span></p>
             {% endfor %}
         </div>
-        <form action="/ask" method="post">
+        <form action="{{ root }}/ask" method="post">
             {% if background is defined %}
             <input title="background" name="background" type="hidden" value="{{ background|tojson|forceescape }}"/>
             {% endif %}
