@@ -199,15 +199,17 @@ def ask():
         logging.info('prediction requested')
         params = get_params()
         logger.debug(json.dumps(params, indent=2))
-        utterances = params.get('utterances', '')
-        if utterances == '':
-            utterances = []
-        elif isinstance(utterances, str):
-            hist_str = html.unescape(utterances)
-            utterances = json.loads(hist_str)
+        all_utterances = params.get('utterances', '')
+        if all_utterances == '':
+            all_utterances = []
+        elif isinstance(all_utterances, str):
+            hist_str = html.unescape(all_utterances)
+            all_utterances = json.loads(hist_str)
         user_input = params.get('user_input', None)
         if user_input is not None:
-            utterances.append(user_input)
+            all_utterances.append(user_input)
+
+        utterances = all_utterances[-(2 * args.max_history + 1):]
         #if 'user_input' in params:
         #    raise DeprecationWarning('Parameter "user_input" is deprecated. Append the user_input to the utterances '
         #                             'instead.')
@@ -229,7 +231,7 @@ def ask():
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
                 # use only the considered utterances to query background
-                background = context_fetcher(' '.join(utterances[-(2 * args.max_history + 1):]), previous_context=background)
+                background = context_fetcher(' '.join(utterances), previous_context=background)
             except InvalidUsage as e:
                 response = e.to_dict()
                 response['status_code'] = e.status_code
@@ -251,24 +253,24 @@ def ask():
         if 'personality' in params:
             personality_encoded = tokenizer.encode(params['personality'])
 
-        utterances_encoded = [tokenizer.encode(utterance) for utterance in utterances[-(2 * args.max_history + 1):]]
-        utterance_types = params.get('utterance_types', None)
+        utterances_encoded = [tokenizer.encode(utterance) for utterance in utterances]
+        all_utterance_types = params.get('utterance_types', None)
 
-        type_bot = tokenizer.special_tokens[TYPE_BOT]
-        if utterance_types is not None:
-            assert len(utterances) == len(utterance_types), f'number of utterance elements [{len(utterances)}] does not match ' \
-                                                       f'number of utterance_types [{len(utterance_types)}]'
+        if all_utterance_types is not None:
+            assert len(all_utterances) == len(all_utterance_types), f'number of utterance elements [{len(utterances)}] does not match ' \
+                                                       f'number of utterance_types [{len(all_utterance_types)}]'
             utterance_types_encoded = []
             allowed_hist_types = ', '.join(tokenizer.special_tokens.keys())
-            for hist_type in utterance_types[-(2 * args.max_history + 1):]:
+            for hist_type in all_utterance_types[-(2 * args.max_history + 1):]:
                 assert hist_type in tokenizer.special_tokens, f'Unknown type for utterances element: {hist_type}. ' \
                                                               f'Use only these types: {allowed_hist_types}'
                 utterance_types_encoded.append(tokenizer.special_tokens[hist_type])
         else:
-            type_user = tokenizer.special_tokens[TYPE_USER]
             # if no utterance types are available, assume the last utterance was from the user and then the type
             # alternates, i.e. starting from last utterance in reverse order: <user>, <bot>, <user>, <bot>, ...
-            utterance_types_encoded = [type_user if (len(utterances) - i) % 2 else type_bot for i, h in enumerate(utterances)]
+            utterance_types_encoded = [tokenizer.special_tokens[TYPE_USER] if (len(utterances) - i) % 2
+                                       else tokenizer.special_tokens[TYPE_BOT]
+                                       for i, h in enumerate(utterances)]
         # predict only if any utterances / user_input (was added to utterances) is available
         if len(utterances) > 0:
             # if explanations are requested:
@@ -306,7 +308,7 @@ def ask():
             utterances_encoded.append(out_ids)
             params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
             params['utterances'] = [tokenizer.decode(utterance) for utterance in utterances_encoded]
-            utterance_types_encoded.append(type_bot)
+            utterance_types_encoded.append(tokenizer.special_tokens[TYPE_BOT])
             params['utterance_types'] = tokenizer.convert_ids_to_tokens(utterance_types_encoded)
             params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
             logger.debug('predicted:\n%s' % params['prediction'])
