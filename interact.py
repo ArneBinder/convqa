@@ -69,7 +69,7 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), history_types=None,
+def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), utterance_types=None,
                     current_output=None, explain=False, replace_unknown=False):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
@@ -96,12 +96,12 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
         context.append((type_bot, personality))
     if current_output is None:
         current_output = []
-    if history_types is None:
-        history_types = [type_user if (len(history) - i) % 2 else type_bot for i, h in enumerate(history)]
+    if utterance_types is None:
+        utterance_types = [type_user if (len(history) - i) % 2 else type_bot for i, h in enumerate(history)]
     else:
-        assert len(history) == len(history_types), f'length of history [{len(history)}] has to be the same as length ' \
-                                                   f'of history_types [{len(history_types)}], if that is provided'
-    _history = list(zip(history_types, history))
+        assert len(history) == len(utterance_types), f'length of history [{len(history)}] has to be the same as length ' \
+                                                   f'of utterance_types [{len(utterance_types)}], if that is provided'
+    _history = list(zip(utterance_types, history))
     eos = None
     explanations = []
     last_ids = None
