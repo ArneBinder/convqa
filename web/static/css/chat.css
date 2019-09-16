@@ -1,4 +1,4 @@
-div.history {
+div.utterances {
 
 }
 
@@ -6,11 +6,11 @@ div.history {
     font-weight: bold;
 }
 
-.history .content .prediction {
+.utterances .content .prediction {
     background-color: DodgerBlue;
 }
 
-.history .content .context {
+.utterances .content .context {
     /* TODO: 256, 256 - attribution / 256, 256 - attribution / 256 */
     /* calc(256 - attr(attribution, 0.0) * 256) */
     /* background-color: rgb(255,calc(256 - attr(attribution number) * 256), calc(256 - attr(attribution number) * 256)) */

@@ -53,31 +53,31 @@
                 console.log(msg);
                 $('#chat').append('<p class="utterance"><span class="utt-author">bot</span>: <span class="utt-content-container"><span class="utt-content">' + msg.prediction + '</span></span></p>');
 
-                // get previous history elems
-                var history_old = $('#chat .utterance .utt-content-container');
-                var history = msg.history;
-                if (!(typeof msg.history_annotated === 'undefined' || msg.history_annotated === null)) {
-                    history = msg.history_annotated;
+                // get previous utterances elems
+                var utterances_old = $('#chat .utterance .utt-content-container');
+                var utterances = msg.utterances;
+                if (!(typeof msg.utterances_annotated === 'undefined' || msg.utterances_annotated === null)) {
+                    utterances = msg.utterances_annotated;
                 }
                 var background = msg.background;
                 if (msg.explain){
-                    history = msg.explanation.history;
+                    utterances = msg.explanation.utterances;
                     if (Object.keys(msg.explanation.background).length > 0){
                         background = msg.explanation.background;
                     }
                 }
-                console.log('received history.length: ', history.length / 2)
-                var offset = history.length - history_old.length;
-                //console.log(history_old);
-                //console.log(history);
+                console.log('received utterances.length: ', utterances.length / 2)
+                var offset = utterances.length - utterances_old.length;
+                //console.log(utterances_old);
+                //console.log(utterances);
                 //console.log(offset);
-                for (var i = 0; i < history_old.length; i++) {
+                for (var i = 0; i < utterances_old.length; i++) {
 
-                    let elem_old = $.parseHTML('<span class="utt-content-unused">'+ history_old[i].innerText + '</span>')[0];
-                    let elem_new = i + offset >= 0 ? $.parseHTML('<span class="utt-content">' + history[i + offset] + '</span>')[0] : null
+                    let elem_old = $.parseHTML('<span class="utt-content-unused">'+ utterances_old[i].innerText + '</span>')[0];
+                    let elem_new = i + offset >= 0 ? $.parseHTML('<span class="utt-content">' + utterances[i + offset] + '</span>')[0] : null
                     let elem = (elem_new !== null && elem_new.innerText == elem_old.innerText) ? elem_new : elem_old;
                     //console.log(elem);
-                    history_old.eq(i).html(elem);
+                    utterances_old.eq(i).html(elem);
                 }
 
                 // handle background
@@ -123,8 +123,8 @@
                 }
                 console.log(username);
                 if (action == 'ask'){
-                    var history = $('#chat .utterance .utt-content').toArray().map(function(i){ return i.innerText })
-                    socket.emit('ask', {user_input: $('#ask_data').val(), history: history, explain: explain, username: username});
+                    var utterances = $('#chat .utterance .utt-content').toArray().map(function(i){ return i.innerText })
+                    socket.emit('ask', {user_input: $('#ask_data').val(), utterances: utterances, explain: explain, username: username});
                  } else if (action == 'send') {
                     socket.emit('send_message', {data: $('#ask_data').val(), username: username});
                  }
@@ -161,7 +161,7 @@
         <div id="background-container"></div>
     </div>
     <h2>Chat</h2>
-    <div id="chat" class="history"></div>
+    <div id="chat" class="utterances"></div>
     <form id="ask" method="POST" action='#'>
         <input title="enter a question or some random stuff" name="ask_data" id="ask_data" type="text" /><button type="submit" name="action" value="ask">send</button>{# <button type="submit" name="action" value="send">send</button> #} <label for="explain">explain<input id="explain" type="checkbox" name="explain"/></label>
     </form>

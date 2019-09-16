@@ -24,6 +24,7 @@ from flask import Flask, jsonify, Response, request, render_template
 # Add the parent folder path to the sys.path list
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 from interact import get_args, load_model, sample_sequence, norm_expl
+from train import TYPE_BOT, TYPE_USER
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
@@ -198,17 +199,17 @@ def ask():
         logging.info('prediction requested')
         params = get_params()
         logger.debug(json.dumps(params, indent=2))
-        history = params.get('history', '')
-        if history == '':
-            history = []
-        elif isinstance(history, str):
-            hist_str = html.unescape(history)
-            history = json.loads(hist_str)
+        utterances = params.get('utterances', '')
+        if utterances == '':
+            utterances = []
+        elif isinstance(utterances, str):
+            hist_str = html.unescape(utterances)
+            utterances = json.loads(hist_str)
         user_input = params.get('user_input', None)
         if user_input is not None:
-            history.append(user_input)
+            utterances.append(user_input)
         #if 'user_input' in params:
-        #    raise DeprecationWarning('Parameter "user_input" is deprecated. Append the user_input to the history '
+        #    raise DeprecationWarning('Parameter "user_input" is deprecated. Append the user_input to the utterances '
         #                             'instead.')
 
         # create required format of context: dict with entry_id -> list of sentences (strings)
@@ -227,8 +228,8 @@ def ask():
         if not params.get('dont_fetch', False):
             assert context_fetcher is not None, 'No context/background fetcher initialized. Please provide a background with every request.'
             try:
-                # use only the considered history to query background
-                background = context_fetcher(' '.join(history[-(2 * args.max_history + 1):]), previous_context=background)
+                # use only the considered utterances to query background
+                background = context_fetcher(' '.join(utterances[-(2 * args.max_history + 1):]), previous_context=background)
             except InvalidUsage as e:
                 response = e.to_dict()
                 response['status_code'] = e.status_code
@@ -250,27 +251,31 @@ def ask():
         if 'personality' in params:
             personality_encoded = tokenizer.encode(params['personality'])
 
-        history_encoded = [tokenizer.encode(utterance) for utterance in history[-(2 * args.max_history + 1):]]
+        utterances_encoded = [tokenizer.encode(utterance) for utterance in utterances[-(2 * args.max_history + 1):]]
         utterance_types = params.get('utterance_types', None)
 
+        type_bot = tokenizer.special_tokens[TYPE_BOT]
         if utterance_types is not None:
-            assert len(history) == len(utterance_types), f'number of history elements [{len(history)}] does not match ' \
+            assert len(utterances) == len(utterance_types), f'number of utterance elements [{len(utterances)}] does not match ' \
                                                        f'number of utterance_types [{len(utterance_types)}]'
             utterance_types_encoded = []
             allowed_hist_types = ', '.join(tokenizer.special_tokens.keys())
             for hist_type in utterance_types[-(2 * args.max_history + 1):]:
-                assert hist_type in tokenizer.special_tokens, f'Unknown type for history element: {hist_type}. ' \
+                assert hist_type in tokenizer.special_tokens, f'Unknown type for utterances element: {hist_type}. ' \
                                                               f'Use only these types: {allowed_hist_types}'
                 utterance_types_encoded.append(tokenizer.special_tokens[hist_type])
         else:
-            utterance_types_encoded = None
-        # predict only if any history / user_input (was added to history) is available
-        if len(history) > 0:
+            type_user = tokenizer.special_tokens[TYPE_USER]
+            # if no utterance types are available, assume the last utterance was from the user and then the type
+            # alternates, i.e. starting from last utterance in reverse order: <user>, <bot>, <user>, <bot>, ...
+            utterance_types_encoded = [type_user if (len(utterances) - i) % 2 else type_bot for i, h in enumerate(utterances)]
+        # predict only if any utterances / user_input (was added to utterances) is available
+        if len(utterances) > 0:
             # if explanations are requested:
             if params.get('explain', False):
                 out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded,
                                                                        personality=personality_encoded,
-                                                                       history=history_encoded,
+                                                                       utterances=utterances_encoded,
                                                                        utterance_types=utterance_types_encoded,
                                                                        tokenizer=tokenizer,
                                                                        model=model, args=args,
@@ -280,36 +285,38 @@ def ask():
                 # add prediction
                 explanations_list[-1] = (explanations_list[-1][0],
                                          f'<span class="prediction">{tokenizer.decode(out_ids)}</span>')
-                params['explanation'] = {'history': [], 'background': {}}
+                params['explanation'] = {'utterances': [], 'background': {}}
                 n_background = 0
                 for special_token, expl_html in explanations_list:
                     if special_token in ['<user>', '<bot>']:
-                        params['explanation']['history'].append(expl_html)
+                        params['explanation']['utterances'].append(expl_html)
                     elif special_token == '<background>':
                         params['explanation']['background'][background_keys[n_background]] = expl_html
                         n_background += 1
             else:
                 with torch.no_grad():
                     out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                                   history=history_encoded,
+                                                   utterances=utterances_encoded,
                                                    utterance_types=utterance_types_encoded,
                                                    tokenizer=tokenizer,
                                                    model=model, args=args,
                                                    explain=False,
                                                    replace_unknown=True)
 
-            history_encoded.append(out_ids)
+            utterances_encoded.append(out_ids)
             params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
-            params['history'] = [tokenizer.decode(utterance) for utterance in history_encoded]
+            params['utterances'] = [tokenizer.decode(utterance) for utterance in utterances_encoded]
+            utterance_types_encoded.append(type_bot)
+            params['utterance_types'] = tokenizer.convert_ids_to_tokens(utterance_types_encoded)
             params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
             logger.debug('predicted:\n%s' % params['prediction'])
 
             # add annotations only when not explaining
             if not params.get('explain', False) and params.get('background', None) is not None:
                 pos_start = 0
-                params['history_annotated'] = []
-                for h in params['history']:
-                    params['history_annotated'].append(insert_annotations(s=h, annotations=params['background'], offset=pos_start))
+                params['utterances_annotated'] = []
+                for h in params['utterances']:
+                    params['utterances_annotated'].append(insert_annotations(s=h, annotations=params['background'], offset=pos_start))
                     # increase (1 for space)
                     pos_start += 1 + len(h)
 

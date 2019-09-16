@@ -69,7 +69,7 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
-def sample_sequence(tokenizer, model, args, background=None, personality=None, history=(), utterance_types=None,
+def sample_sequence(tokenizer, model, args, background=None, personality=None, utterances=(), utterance_types=(),
                     current_output=None, explain=False, replace_unknown=False):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
     assert max_sequence_length <= model.config.n_ctx, 'max_sequence_length [%i] was set to a value higher than ' \
@@ -96,18 +96,16 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, h
         context.append((type_bot, personality))
     if current_output is None:
         current_output = []
-    if utterance_types is None:
-        utterance_types = [type_user if (len(history) - i) % 2 else type_bot for i, h in enumerate(history)]
-    else:
-        assert len(history) == len(utterance_types), f'length of history [{len(history)}] has to be the same as length ' \
-                                                   f'of utterance_types [{len(utterance_types)}], if that is provided'
-    _history = list(zip(utterance_types, history))
+    assert len(utterances) == len(utterance_types), f'length of utterances [{len(utterances)}] has to be the ' \
+                                                    f'same as length of utterance_types [{len(utterance_types)}], ' \
+                                                    f'if that is provided'
+    utterances_with_types = list(zip(utterance_types, utterances))
     eos = None
     explanations = []
     last_ids = None
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(context=context,
-                                                       history=_history,
+                                                       history=utterances_with_types,
                                                        reply=(type_bot, current_output), tokenizer=tokenizer, eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
@@ -284,7 +282,7 @@ def process_coqa_file(tokenizer, model, args):
             history_encoded.append(tokenizer.encode(question_text))
             with torch.no_grad():
                 try:
-                    out_ids, _ = sample_sequence(background=background_encoded, history=history_encoded,
+                    out_ids, _ = sample_sequence(background=background_encoded, utterances=history_encoded,
                                                  tokenizer=tokenizer,
                                                  model=model, args=args)
                     history_encoded.append(out_ids)
@@ -320,7 +318,7 @@ def run_interactive(tokenizer, model, args):
             raw_text = input(">>> ")
         history_encoded.append(tokenizer.encode(raw_text))
         with torch.no_grad():
-            out_ids, _ = sample_sequence(personality=personality, history=history_encoded, tokenizer=tokenizer,
+            out_ids, _ = sample_sequence(personality=personality, utterances=history_encoded, tokenizer=tokenizer,
                                          model=model, args=args)
         history_encoded.append(out_ids)
         history_encoded = history_encoded[-(2*args.max_history+1):]
