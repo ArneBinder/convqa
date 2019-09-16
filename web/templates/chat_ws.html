@@ -53,8 +53,8 @@
                 console.log(msg);
                 $('#chat').append('<p class="utterance"><span class="utt-author">bot</span>: <span class="utt-content-container"><span class="utt-content">' + msg.prediction + '</span></span></p>');
 
-                if (!(typeof msg.message === 'undefined' || msg.message === null)) {
-                    $('#chat').append('<p class="utterance"><span class="utt-author">system</span>: <span class="utt-content-container"><span class="utt-content-system">' + msg.message + '</span></span></p>');
+                if (!(typeof msg.error === 'undefined' || msg.error === null)) {
+                    $('#chat').append('<p class="utterance"><span class="utt-author">system</span>: <span class="utt-content-container"><span class="utt-content-system">' + msg.error + '</span></span></p>');
                 } else {
 
                     // get previous utterances elems
