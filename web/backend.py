@@ -88,9 +88,9 @@ def hello_world():
     return "Hello World!"
 
 
-@app.route("/")
-def hello_world2():
-    return hello_world()
+@app.route("/", methods=['GET', 'POST'])
+def _ask():
+    return ask()
 
 
 def token_to_html(token, color):
@@ -207,6 +207,9 @@ def ask():
         user_input = params.get('user_input', None)
         if user_input is not None:
             history.append(user_input)
+        #if 'user_input' in params:
+        #    raise DeprecationWarning('Parameter "user_input" is deprecated. Append the user_input to the history '
+        #                             'instead.')
 
         # create required format of context: dict with entry_id -> list of sentences (strings)
         #if isinstance(params.get('background', None), str):
@@ -248,14 +251,30 @@ def ask():
             personality_encoded = tokenizer.encode(params['personality'])
 
         history_encoded = [tokenizer.encode(utterance) for utterance in history[-(2 * args.max_history + 1):]]
+        history_types = params.get('history_types', None)
+
+        if history_types is not None:
+            assert len(history) == len(history_types), f'number of history elements [{len(history)}] does not match ' \
+                                                       f'number of history_types [{len(history_types)}]'
+            history_types_encoded = []
+            allowed_hist_types = ', '.join(tokenizer.special_tokens.keys())
+            for hist_type in history_types[-(2 * args.max_history + 1):]:
+                assert hist_type in tokenizer.special_tokens, f'Unknown type for history element: {hist_type}. ' \
+                                                              f'Use only these types: {allowed_hist_types}'
+                history_types_encoded.append(tokenizer.special_tokens[hist_type])
+        else:
+            history_types_encoded = None
         # predict only if any history / user_input (was added to history) is available
         if len(history) > 0:
+            # if explanations are requested:
             if params.get('explain', False):
                 out_ids, eos, last_ids, explanations = sample_sequence(background=background_encoded,
                                                                        personality=personality_encoded,
-                                                                       history=history_encoded, tokenizer=tokenizer,
+                                                                       history=history_encoded,
+                                                                       history_types=history_types_encoded,
+                                                                       tokenizer=tokenizer,
                                                                        model=model, args=args,
-                                                                       explain=params.get('explain', False),
+                                                                       explain=True,
                                                                        replace_unknown=True)
                 explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
                 # add prediction
@@ -272,9 +291,11 @@ def ask():
             else:
                 with torch.no_grad():
                     out_ids, eos = sample_sequence(background=background_encoded, personality=personality_encoded,
-                                                   history=history_encoded, #[-(2 * args.max_history + 1):],
-                                                   tokenizer=tokenizer, model=model, args=args,
-                                                   explain=params.get('explain', False),
+                                                   history=history_encoded,
+                                                   history_types=history_types_encoded,
+                                                   tokenizer=tokenizer,
+                                                   model=model, args=args,
+                                                   explain=False,
                                                    replace_unknown=True)
 
             history_encoded.append(out_ids)
