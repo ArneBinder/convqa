@@ -69,6 +69,7 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     return logits
 
 
+# TODO: try sampling like in https://einstein.ai/presentations/ctrl.pdf
 def sample_sequence(tokenizer, model, args, background=None, personality=None, utterances=(), utterance_types=(),
                     current_output=None, explain=False, replace_unknown=False):
     max_sequence_length = args.max_sequence_length if args.max_sequence_length > 0 else model.config.n_ctx
