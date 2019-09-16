@@ -53,54 +53,59 @@
                 console.log(msg);
                 $('#chat').append('<p class="utterance"><span class="utt-author">bot</span>: <span class="utt-content-container"><span class="utt-content">' + msg.prediction + '</span></span></p>');
 
-                // get previous utterances elems
-                var utterances_old = $('#chat .utterance .utt-content-container');
-                var utterances = msg.utterances;
-                if (!(typeof msg.utterances_annotated === 'undefined' || msg.utterances_annotated === null)) {
-                    utterances = msg.utterances_annotated;
-                }
-                var background = msg.background;
-                if (msg.explain){
-                    utterances = msg.explanation.utterances;
-                    if (Object.keys(msg.explanation.background).length > 0){
-                        background = msg.explanation.background;
-                    }
-                }
-                console.log('received utterances.length: ', utterances.length / 2)
-                var offset = utterances.length - utterances_old.length;
-                //console.log(utterances_old);
-                //console.log(utterances);
-                //console.log(offset);
-                for (var i = 0; i < utterances_old.length; i++) {
-
-                    let elem_old = $.parseHTML('<span class="utt-content-unused">'+ utterances_old[i].innerText + '</span>')[0];
-                    let elem_new = i + offset >= 0 ? $.parseHTML('<span class="utt-content">' + utterances[i + offset] + '</span>')[0] : null
-                    let elem = (elem_new !== null && elem_new.innerText == elem_old.innerText) ? elem_new : elem_old;
-                    //console.log(elem);
-                    utterances_old.eq(i).html(elem);
-                }
-
-                // handle background
-                if (!(typeof background === 'undefined' || background === null)) {
-                    $('#background-container').empty();
-                    for (let [key, value] of Object.entries(background)) {
-                        var text = value
-                        if (!(typeof value.text === 'undefined' || value.text === null)) {
-                            text = value.text
-                        }
-                        $('#background-container').append(
-                            '<label class="collapsible">\
-                                <input type="checkbox" />\
-                                <span class="arrow">></span>\
-                                <span class="collapser"><span class="name">' + key + '</span></span>\
-                                <span><a href="'+ key +'" target="_blank">(source)</a></span>\
-                                <div class="collapsed"><span class="content">' + text +'</span></div>\
-                            </label>'
-                        );
-                    }
-                    $('#background').show();
+                if (!(typeof msg.message === 'undefined' || msg.message === null)) {
+                    $('#chat').append('<p class="utterance"><span class="utt-author">system</span>: <span class="utt-content-container"><span class="utt-content-system">' + msg.message + '</span></span></p>');
                 } else {
-                    $('#background').hide();
+
+                    // get previous utterances elems
+                    var utterances_old = $('#chat .utterance .utt-content-container');
+                    var utterances = msg.utterances;
+                    if (!(typeof msg.utterances_annotated === 'undefined' || msg.utterances_annotated === null)) {
+                        utterances = msg.utterances_annotated;
+                    }
+                    var background = msg.background;
+                    if (msg.explain){
+                        utterances = msg.explanation.utterances;
+                        if (Object.keys(msg.explanation.background).length > 0){
+                            background = msg.explanation.background;
+                        }
+                    }
+                    console.log('received utterances.length: ', utterances.length / 2)
+                    var offset = utterances.length - utterances_old.length;
+                    //console.log(utterances_old);
+                    //console.log(utterances);
+                    //console.log(offset);
+                    for (var i = 0; i < utterances_old.length; i++) {
+
+                        let elem_old = $.parseHTML('<span class="utt-content-unused">'+ utterances_old[i].innerText + '</span>')[0];
+                        let elem_new = i + offset >= 0 ? $.parseHTML('<span class="utt-content">' + utterances[i + offset] + '</span>')[0] : null
+                        let elem = (elem_new !== null && elem_new.innerText == elem_old.innerText) ? elem_new : elem_old;
+                        //console.log(elem);
+                        utterances_old.eq(i).html(elem);
+                    }
+
+                    // handle background
+                    if (!(typeof background === 'undefined' || background === null)) {
+                        $('#background-container').empty();
+                        for (let [key, value] of Object.entries(background)) {
+                            var text = value
+                            if (!(typeof value.text === 'undefined' || value.text === null)) {
+                                text = value.text
+                            }
+                            $('#background-container').append(
+                                '<label class="collapsible">\
+                                    <input type="checkbox" />\
+                                    <span class="arrow">></span>\
+                                    <span class="collapser"><span class="name">' + key + '</span></span>\
+                                    <span><a href="'+ key +'" target="_blank">(source)</a></span>\
+                                    <div class="collapsed"><span class="content">' + text +'</span></div>\
+                                </label>'
+                            );
+                        }
+                        $('#background').show();
+                    } else {
+                        $('#background').hide();
+                    }
                 }
 
                 if (cb)
