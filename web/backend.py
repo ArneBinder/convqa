@@ -396,11 +396,19 @@ def ask():
             logger.debug('predicted:\n%s' % params['prediction'])
 
             # add annotations only when not explaining
-            if not params.get('explain', False) and params.get('background', None) is not None:
+            if params.get('background', None) is not None:
                 pos_start = 0
+                # deprecated, just for compatibility (use entity_annotations instead)
                 params['utterances_annotated'] = []
+                params['entity_annotations'] = []
                 for h in params['utterances']:
-                    params['utterances_annotated'].append(insert_annotations(s=h, annotations=params['background'], offset=pos_start))
+                    params['utterances_annotated'].append(insert_annotations(s=h, annotations=params['background'],
+                                                                             offset=pos_start))
+                    for k, entity in params['background'].items():
+                        start = entity['offsetStart'] - pos_start
+                        if 0 <= start < len(h):
+                            l = entity['offsetEnd'] - entity['offsetStart']
+                            params['entity_annotations'].append((start, l, k))
                     # increase (1 for space)
                     pos_start += 1 + len(h)
 
