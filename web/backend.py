@@ -102,11 +102,13 @@ def token_to_html_not_working(token, attribution):
     return f'<span class="context" attribution="{attribution}">{html.escape(token)}</span>'
 
 
-def visualize_explanation(tokens, expl, split_tokens=(), return_tuples=False):
+def create_explanation_annotations(tokens, expl, split_tokens=(), return_tuples=False, return_spans=True):
     expl = norm_expl(expl, _min=0.0)
-    expl *= 256
+    #expl *= 256
 
     html_res = []
+    annotations = []
+    current_annotation_tuples = []
     current_html_res = ''
     prev_special = None
     for i in range(len(expl)):
@@ -117,19 +119,59 @@ def visualize_explanation(tokens, expl, split_tokens=(), return_tuples=False):
                 else:
                     html_res.append(prev_special + current_html_res)
                 current_html_res = ''
-            prev_special = tokens[i] if return_tuples else token_to_html(token=tokens[i], color=256 - int(expl[i]))
+                annotations.append(current_annotation_tuples)
+                current_annotation_tuples = []
+            if return_spans:
+                prev_special = tokens[i] if return_tuples else token_to_html(token=tokens[i], color=256 - int(expl[i] * 256))
+            else:
+                prev_special = tokens[i]
         else:
-            current_html_res += token_to_html(token=tokens[i], color=256 - int(expl[i]))
-
+            if return_spans:
+                current_html_res += token_to_html(token=tokens[i], color=256 - int(expl[i] * 256))
+            else:
+                current_annotation_tuples.append((len(current_html_res), len(tokens[i]), float(expl[i])))
+                current_html_res += tokens[i]
     if return_tuples:
         html_res.append((prev_special, current_html_res))
     else:
         # allow not split result (no special_tokens given)
         html_res.append((prev_special or '') + current_html_res)
+    if not return_spans:
+        annotations.append(current_annotation_tuples)
+        return html_res, annotations
     return html_res
 
 
-def process_explanations(explanations, last_ids, tokenizer):
+def create_annotated_spans(texts, annotations):
+    res = []
+    for i, text in enumerate(texts):
+        # sort by end indices (start + length) and revert
+        annots = sorted(annotations[i], key=lambda a: a[0] + a[1], reverse=True)
+        for start, length, annot in annots:
+            if isinstance(annot, float):
+                c = 256 - int(annot * 256)
+                text = text[:start] + token_to_html(token=text[start:start+length], color=c) + text[start+length:]
+            else:
+                raise TypeError(f'unknown type for annotation [{annot}]: {type(annot)}')
+        res.append(text)
+    return res
+
+
+def merge_sample_explanations(explanations, norm=False):
+    explanations_sum = None
+    for current_explanations in explanations:
+        if explanations_sum is None:
+            explanations_sum = current_explanations
+        else:
+            explanations_sum = {
+                expl_type: explanations_sum[expl_type] + (norm_expl(expl[:len(explanations_sum[expl_type])], _min=0.0)
+                                                          if norm else expl[:len(explanations_sum[expl_type])])
+                for expl_type, expl in current_explanations.items()}
+    return explanations_sum
+
+
+# not used
+def process_explanations(explanations, last_ids, tokenizer, dump=False):
     all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
     all_types = [tokenizer.decode([tok]) for tok in last_ids[1]]
     explanations_all_html = []
@@ -140,36 +182,47 @@ def process_explanations(explanations, last_ids, tokenizer):
             explanations_sum = current_explanations
         else:
             explanations_sum = {expl_type: explanations_sum[expl_type] + norm_expl(expl[:len(explanations_sum[expl_type])], _min=0.0) for expl_type, expl in current_explanations.items()}
-        for expl_type, expl in current_explanations.items():
-            explanations_html.setdefault(expl_type,[]).append('<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=expl)))
-        explanations_all_html.append('<div>%s</div>' % ''.join(visualize_explanation(tokens=all_tokens, expl=sum(current_explanations.values()))))
+        if dump:
+            for expl_type, expl in current_explanations.items():
+                explanations_html.setdefault(expl_type,[]).append('<div>%s</div>' % ''.join(create_explanation_annotations(tokens=all_tokens, expl=expl)))
+            explanations_all_html.append('<div>%s</div>' % ''.join(create_explanation_annotations(tokens=all_tokens, expl=sum(current_explanations.values()))))
 
-    # individual explanations per type and per prediction
-    for expl_type, explanations_html in explanations_html.items():
+    if dump:
+        # individual explanations per type and per prediction
+        for expl_type, explanations_html in explanations_html.items():
+            expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
+                        % '\n'.join(explanations_html)
+            open('explanations_%s.html' % expl_type, 'w').write(expl_html)
+
+        # individual explanations per prediction (summed over types)
         expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
-                    % '\n'.join(explanations_html)
-        open('explanations_%s.html' % expl_type, 'w').write(expl_html)
+                           % '\n'.join(explanations_all_html)
+        open('explanations.html', 'w').write(expl_html)
 
-    # individual explanations per prediction (summed over types)
-    expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s</body>\n</html>' \
-                       % '\n'.join(explanations_all_html)
-    open('explanations.html', 'w').write(expl_html)
-
-    # individual explanations per type (summed over predictions)
-    for expl_type, expl in explanations_sum.items():
-        expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
-                    % '\n'.join(['<div>%s</div>' % u for u in
-                                 visualize_explanation(tokens=all_tokens, expl=explanations_sum[expl_type],
-                                                       split_tokens=tokenizer.special_tokens.keys())])
-        open('explanations_sum_%s.html' % expl_type, 'w').write(expl_html)
+        # individual explanations per type (summed over predictions)
+        for expl_type, expl in explanations_sum.items():
+            expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
+                        % '\n'.join(['<div>%s</div>' % u for u in
+                                     create_explanation_annotations(tokens=all_tokens, expl=explanations_sum[expl_type],
+                                                                    split_tokens=tokenizer.special_tokens.keys())])
+            open('explanations_sum_%s.html' % expl_type, 'w').write(expl_html)
 
     # all summed together
-    res = visualize_explanation(tokens=all_tokens, expl=sum(explanations_sum.values()), split_tokens=tokenizer.special_tokens.keys(), return_tuples=True)
-    expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
-                       % '\n'.join([f'<div>{html.escape(special_token)}:{u}</div>' for special_token, u in res])
-    open('explanations_sum.html', 'w').write(expl_html)
+    res_with_spans = create_explanation_annotations(tokens=all_tokens, expl=sum(explanations_sum.values()), split_tokens=tokenizer.special_tokens.keys(), return_tuples=True)
+    if dump:
+        expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
+                           % '\n'.join([f'<div>{html.escape(special_token)}:{u}</div>' for special_token, u in res_with_spans])
+        open('explanations_sum.html', 'w').write(expl_html)
 
-    return res
+    res, annotations = create_explanation_annotations(tokens=all_tokens, expl=sum(explanations_sum.values()),
+                                                      split_tokens=tokenizer.special_tokens.keys(),
+                                                      return_tuples=True,
+                                                      return_spans=False)
+    special_tokens, texts = zip(*res)
+    #res_new = create_annotated_spans([r[1] for r in res], annotations)
+
+    #return res_with_spans
+    return special_tokens, texts, annotations
 
 
 def insert_annotations(s, annotations, offset=0, exclude_key='text'):
@@ -283,17 +336,39 @@ def ask():
                                                                        model=model, args=args,
                                                                        explain=True,
                                                                        replace_unknown=True)
-                explanations_list = process_explanations(explanations=explanations, last_ids=last_ids, tokenizer=tokenizer)
+                explanations_merged = merge_sample_explanations(explanations)
+                all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
+                special_and_texts, explanation_annotations = create_explanation_annotations(tokens=all_tokens,
+                                                                                            expl=sum(explanations_merged.values()),
+                                                                                            split_tokens=tokenizer.special_tokens.keys(),
+                                                                                            return_tuples=True, return_spans=False)
+                special_tokens, explanation_texts = zip(*special_and_texts)
+                explanation_texts = list(explanation_texts)
+                explanation_texts_w_annotations = create_annotated_spans(explanation_texts, explanation_annotations)
+
                 # add prediction
-                explanations_list[-1] = (explanations_list[-1][0],
-                                         f'<span class="prediction">{tokenizer.decode(out_ids)}</span>')
+                explanation_texts[-1] = tokenizer.decode(out_ids)
+                explanation_texts_w_annotations[-1] = f'<span class="prediction">{html.escape(tokenizer.decode(out_ids))}</span>'
+                # just for compatibility
                 params['explanation'] = {'utterances': [], 'background': {}}
+                params['explanation_annotations'] = {'utterances': [], 'background': {}}
+                # just for sanity check
+                params['explanation_texts'] = {'utterances': [], 'background': {}}
+
                 n_background = 0
-                for special_token, expl_html in explanations_list:
-                    if special_token in ['<user>', '<bot>']:
-                        params['explanation']['utterances'].append(expl_html)
-                    elif special_token == '<background>':
-                        params['explanation']['background'][background_keys[n_background]] = expl_html
+                for i, _ in enumerate(explanation_texts):
+                    if special_tokens[i] in ['<user>', '<bot>']:
+                        # compatibility
+                        params['explanation']['utterances'].append(explanation_texts_w_annotations[i])
+                        params['explanation_annotations']['utterances'].append(explanation_annotations[i])
+                        # sanity check (should equal params['utterances'])
+                        params['explanation_texts']['utterances'].append(explanation_texts[i])
+                    elif special_tokens[i] == '<background>':
+                        # compatibility
+                        params['explanation']['background'][background_keys[n_background]] = explanation_texts_w_annotations[i]
+                        params['explanation_annotations']['background'][background_keys[n_background]] = explanation_annotations[i]
+                        # sanity check
+                        params['explanation_texts']['background'][background_keys[n_background]] = explanation_texts[i]
                         n_background += 1
             else:
                 with torch.no_grad():
@@ -308,6 +383,13 @@ def ask():
             utterances_encoded.append(out_ids)
             params['prediction'] = tokenizer.decode(out_ids, skip_special_tokens=True)
             params['utterances'] = [tokenizer.decode(utterance) for utterance in utterances_encoded]
+            # sanity check
+            if 'explanation_texts' in params:
+                for i, u in enumerate(params['utterances']):
+                    assert u == params['explanation_texts']['utterances'][i], \
+                        f'utterance [{u}] does not equal text returned by visualize_explanation ' \
+                        f'[{params["explanation_text"]["utterances"][i]}]'
+                del params['explanation_texts']
             utterance_types_encoded.append(tokenizer.special_tokens[TYPE_BOT])
             params['utterance_types'] = tokenizer.convert_ids_to_tokens(utterance_types_encoded)
             params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
