@@ -150,7 +150,7 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
             #             % (torch.min(probs).item(), torch.max(probs).item(),
             #                torch.min(logits).item(), torch.max(logits).item()))
             prev_prob = probs_all[prev]
-            logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
+            #logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
             prev_prob.backward()
             model_wte = model.transformer.wte.weight
             if torch.min(model_wte.grad) == torch.max(model_wte.grad) == 0.0:
