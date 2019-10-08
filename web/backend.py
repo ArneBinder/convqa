@@ -416,6 +416,7 @@ def ask():
         if 'application/json' in http_accept:
             json_data = json.dumps(params)
             response = Response(json_data, mimetype=http_accept)
+            response.headers['Access-Control-Allow-Origin'] = '*'
         else:
             response = Response(render_template('chat.html', root=args.root, **params), mimetype='text/html')
 
