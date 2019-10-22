@@ -19,7 +19,7 @@ import eventlet
 import requests
 import torch
 from eventlet import wsgi
-from flask import Flask, jsonify, Response, request, render_template
+from flask import Flask, jsonify, Response, request, render_template, send_from_directory
 
 # Add the parent folder path to the sys.path list
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
@@ -89,9 +89,14 @@ def hello_world():
     return "Hello World!"
 
 
-@app.route("/", methods=['GET', 'POST'])
-def _ask():
-    return ask()
+@app.route('/<path:path>', methods=['GET'])
+def static_proxy(path):
+    return send_from_directory('./frontend/', path)
+
+
+@app.route('/')
+def root():
+    return send_from_directory('./frontend/', 'index.html')
 
 
 def token_to_html(token, color):
