@@ -14,7 +14,7 @@
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/3.6.3/workbox-sw.js");
 
 importScripts(
-  "/precache-manifest.568ac7615d5f814777318736b55195a2.js"
+  "precache-manifest.d79d5f716e82de57371b4d2c24bdf0b0.js"
 );
 
 workbox.core.setCacheNameDetails({prefix: "bbdc-chatbot"});
