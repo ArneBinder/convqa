@@ -217,7 +217,7 @@ def load_model(model_checkpoint, model_type):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     _model.to(device)
     _model.eval()
-    return _model, _tokenizer
+    return _model, _tokenizer, os.path.basename(model_checkpoint) if model_checkpoint else model_checkpoint
 
 
 def get_args(parser=ArgumentParser(), arguments=()):
@@ -347,7 +347,7 @@ if __name__ == "__main__":
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model, tokenizer = load_model(model_checkpoint=args.model_checkpoint, model_type=args.model)
+    model, tokenizer, checkpoint_fn = load_model(model_checkpoint=args.model_checkpoint, model_type=args.model)
 
     if args.coqa_file:
         try:

@@ -417,6 +417,7 @@ def ask():
                     # increase (1 for space)
                     pos_start += 1 + len(h)
 
+        params['model'] = checkpoint_fn
         http_accept = params.get('HTTP_ACCEPT', False) or 'text/html'
         if 'application/json' in http_accept:
             json_data = json.dumps(params)
@@ -437,7 +438,7 @@ def ask():
 
 @app.route("/reload", methods=['GET', 'POST'])
 def reload_model():
-    global model, tokenizer
+    global model, tokenizer, checkpoint_fn
     try:
         start = time.time()
         logging.info('prediction requested')
@@ -445,7 +446,7 @@ def reload_model():
         logger.debug(json.dumps(params, indent=2))
         args_model_checkpoint = args.model_checkpoint
         full_model_checkpoint = os.path.join(os.path.dirname(args_model_checkpoint), params['model_checkpoint'])
-        model, tokenizer = load_model(model_checkpoint=full_model_checkpoint, model_type=params['model_type'])
+        model, tokenizer, checkpoint_fn = load_model(model_checkpoint=full_model_checkpoint, model_type=params['model_type'])
 
         response = Response(f'loaded model {params["model_checkpoint"]} successfully')
         logger.info("Time spent handling the request: %f" % (time.time() - start))
@@ -553,7 +554,7 @@ if __name__ == "__main__":
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    model, tokenizer = load_model(model_checkpoint=args.model_checkpoint, model_type=args.model)
+    model, tokenizer, checkpoint_fn = load_model(model_checkpoint=args.model_checkpoint, model_type=args.model)
 
     try:
         logger.info('create wikipedia context fetcher ...')
