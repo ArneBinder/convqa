@@ -397,7 +397,10 @@ def ask():
                 del params['explanation_texts']
             utterance_types_encoded.append(tokenizer.special_tokens[TYPE_BOT])
             params['utterance_types'] = tokenizer.convert_ids_to_tokens(utterance_types_encoded)
-            params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
+            if eos is not None:
+                params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]
+            else:
+                params['eos'] = None
             logger.debug('predicted:\n%s' % params['prediction'])
 
             # add annotations only when not explaining
