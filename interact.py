@@ -256,6 +256,8 @@ def get_args(parser=ArgumentParser(), arguments=()):
     parser.add_argument("--deploy", action="store_true", help="create a wsgi deployment server")
     parser.add_argument("--root", type=str, default='', help='if started behind a reverse proxy, '
                                                              'use e.g. "--root backend/"')
+    parser.add_argument("--entity_linking_service_url", type=str, default='http://cloud.science-miner.com/nerd/service',
+                        help="base url for the entity linking service (entity-fishing)")
 
     for parse_arg in arguments:
         parser.add_argument(**parse_arg)

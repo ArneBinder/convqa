@@ -462,8 +462,8 @@ def reload_model():
     return response
 
 
-def create_wikipedia_context_fetcher(wikipedia_file=None):
-    url_disambiguate = "http://cloud.science-miner.com/nerd/service/disambiguate"
+def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud.science-miner.com/nerd/service'):
+    url_disambiguate = base_url + "/disambiguate"
     wikipedia_data = None
     if wikipedia_file:
         logger.info('load wikipedia data from: %s...' % wikipedia_file)
@@ -473,7 +473,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None):
             logger.info('loaded %i articles' % len(wikipedia_data))
         except:
             logger.error('could not load wikipedia dump: %s' % wikipedia_file)
-    url_fetch = "http://cloud.science-miner.com/nerd/service/kb/concept"
+    url_fetch = base_url + "/kb/concept"
     headers = {
         'Cache-Control': 'no-cache',
     }
@@ -561,7 +561,7 @@ if __name__ == "__main__":
 
     try:
         logger.info('create wikipedia context fetcher ...')
-        context_fetcher = create_wikipedia_context_fetcher(wikipedia_file=args.wikipedia_dump)
+        context_fetcher = create_wikipedia_context_fetcher(wikipedia_file=args.wikipedia_dump, base_url=args.entity_linking_service_url)
     except IOError as e:
         logger.warning(
             'could not create a context fetcher. Please provide a context with every request.' % args.spacy_model)
