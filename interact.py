@@ -2,32 +2,71 @@
 # All rights reserved.
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-import ast
-import html
 import json
 import logging
 import os
-import pickle
 import random
-import re
-import sys
-import time
-import traceback
 from argparse import ArgumentParser
+from contextlib import contextmanager
 from itertools import chain
 from pprint import pformat
 
 import numpy as np
-import requests
-from tqdm import tqdm
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER
 from utils import get_dataset_personalities, download_pretrained_model
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
+
+
+@contextmanager
+def capture_inputs_with_gradients(module: torch.nn.modules.module):
+    """
+    Inspired by https://github.com/allenai/allennlp/blob/417a75727d4604e1da0eda461b03b29a73f0bf50/allennlp/predictors/predictor.py#L146-L178
+
+    Context manager that captures the inputs and gradients at a certain module.
+    The idea is that you could use it as follows:
+    .. code-block:: python
+        with capture_inputs_with_gradients(module) as captured:
+            outputs = predictor.predict_json(inputs)
+            selected_scalar_output = ...
+            selected_scalar_output.backward()
+
+        # use captured['inputs'] and captured['gradients] here!
+    """
+    if module is not None:
+        # dict is required to keep a reference
+        results = {}
+
+        # First we'll register hooks to add the outputs of each module to the results dict.
+        def capture_input():
+            def _capture_input(mod, inputs, _):
+                results['inputs'] = inputs
+
+            return _capture_input
+
+        fw_hook = module.register_forward_hook(capture_input())
+
+        def capture_gradients():
+            def _capture_grads(mod, grad_input, grad_output):
+                results['grads'] = grad_input
+
+            return _capture_grads
+
+        bw_hook = module.register_backward_hook(capture_gradients())
+
+        # If you capture the return value of the context manager, you get the results dict.
+        yield results
+
+        # And then when you exit the context we remove all the hooks.
+        fw_hook.remove()
+        bw_hook.remove()
+    else:
+        yield None
 
 
 def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_value=-float('Inf')):
@@ -67,6 +106,16 @@ def top_filtering(logits, top_k=0, top_p=0.0, threshold=-float('Inf'), filter_va
     logits[indices_to_remove] = filter_value
 
     return logits
+
+
+def get_embedding_explanations(weights, ids, label='embedding'):
+    if torch.min(weights.grad) == torch.max(weights.grad) == 0.0:
+        logger.warning(f'create explanations (i: {len(ids)}): min==max==0.0 for ALL {label} gradients')
+    grads_ids = weights.grad[ids.squeeze()]
+    if torch.min(grads_ids) == torch.max(grads_ids) == 0.0:
+        logger.warning(f'create explanations (i: {len(ids)}): min==max==0.0 for {label} gradients wrt. input_ids')
+    expl_ids = (torch.abs(grads_ids) * torch.abs(weights[ids])).sum(dim=-1)
+    return expl_ids
 
 
 # TODO: try sampling like in https://einstein.ai/presentations/ctrl.pdf
@@ -122,58 +171,61 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         else:
             position_ids = None
-        logits = model(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
-        if "gpt2" == args.model:
-            logits = logits[0]
-        logits_all = logits[0, -1, :] / args.temperature
-        logits = top_filtering(logits_all.clone(), top_k=args.top_k, top_p=args.top_p)
-        probs = F.softmax(logits, dim=-1)
+        capture_at_module = None
+        if explain:
+            if "gpt2" == args.model:
+                capture_at_module = model.transformer.drop
+            else:
+                raise NotImplementedError('explain is implemented only for gpt2 model')
 
-        #logger.debug('nbr of non zeros in filtered probs_top: %i (of %i)' % (torch.nonzero(probs.data).size(0), len(probs)))
+        # this captures only if capture_at_module != None
+        with capture_inputs_with_gradients(capture_at_module) as captured:
+            logits = model(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
-        prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
-        if i < args.min_length and prev.item() in special_tokens_ids:
-            while prev.item() in special_tokens_ids:
-                logger.debug('resample because of special token...')
-                prev = torch.multinomial(probs, num_samples=1)
+            if "gpt2" == args.model:
+                logits = logits[0]
+            logits_all = logits[0, -1, :] / args.temperature
+            logits = top_filtering(logits_all.clone(), top_k=args.top_k, top_p=args.top_p)
+            probs = F.softmax(logits, dim=-1)
 
+            #logger.debug('nbr of non zeros in filtered probs_top: %i (of %i)' % (torch.nonzero(probs.data).size(0), len(probs)))
+
+            prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
+            if i < args.min_length and prev.item() in special_tokens_ids:
+                while prev.item() in special_tokens_ids:
+                    logger.debug('resample because of special token...')
+                    prev = torch.multinomial(probs, num_samples=1)
+
+            if explain:
+                probs_all = F.softmax(logits_all, dim=-1)
+                #logger.debug('nbr of non zeros in filtered probs_all: %i (of %i)'
+                #             % (torch.nonzero(probs_all.data).size(0), len(probs)))
+                #logger.debug('probs_all min: %f, max: %f; logits_all min: %f, max %f'
+                #             % (torch.min(probs_all).item(), torch.max(probs_all).item(),
+                #                torch.min(probs_all).item(), torch.max(probs_all).item()))
+                #logger.debug('probs_top min: %f, max: %f; logits_top min: %f, max %f'
+                #             % (torch.min(probs).item(), torch.max(probs).item(),
+                #                torch.min(logits).item(), torch.max(logits).item()))
+                prev_prob = probs_all[prev]
+                #logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
+                prev_prob.backward()
+                # expl_input_ids = get_embedding_explanations(weights=model.transformer.wte.weight, ids=input_ids[0], label='embedding')
+                # expl_token_type_ids = get_embedding_explanations(weights=model.transformer.wte.weight, ids=token_type_ids[0], label='type embedding')
+                # expl_position_ids = get_embedding_explanations(weights= model.transformer.wpe.weight, ids=position_ids[0], label='position embedding')
+                #explanations.append({ 'input_ids': expl_input_ids.detach().cpu().numpy(),
+                #    'token_type_ids': expl_token_type_ids.detach().cpu().numpy(),
+                #    'position_ids': expl_position_ids.detach().cpu().numpy(),
+                #})
 
         if explain:
-            probs_all = F.softmax(logits_all, dim=-1)
-            #logger.debug('nbr of non zeros in filtered probs_all: %i (of %i)'
-            #             % (torch.nonzero(probs_all.data).size(0), len(probs)))
-            #logger.debug('probs_all min: %f, max: %f; logits_all min: %f, max %f'
-            #             % (torch.min(probs_all).item(), torch.max(probs_all).item(),
-            #                torch.min(probs_all).item(), torch.max(probs_all).item()))
-            #logger.debug('probs_top min: %f, max: %f; logits_top min: %f, max %f'
-            #             % (torch.min(probs).item(), torch.max(probs).item(),
-            #                torch.min(logits).item(), torch.max(logits).item()))
-            prev_prob = probs_all[prev]
-            #logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
-            prev_prob.backward()
-            model_wte = model.transformer.wte.weight
-            if torch.min(model_wte.grad) == torch.max(model_wte.grad) == 0.0:
-                logger.warning('create explanations (i: %i): min==max==0.0 for ALL embedding gradients' % len(current_output))
-            model_wpe = model.transformer.wpe.weight
-            if torch.min(model_wpe.grad) == torch.max(model_wpe.grad) == 0.0:
-                logger.warning('create explanations (i: %i): min==max==0.0 for ALL position embedding gradients' % len(current_output))
-            grads_input_ids = model_wte.grad[input_ids.squeeze()]
-            grads_token_type_ids = model_wte.grad[token_type_ids.squeeze()]
-            grads_position_ids = model_wpe.grad[position_ids.squeeze()]
-            if torch.min(grads_input_ids) == torch.max(grads_input_ids) == 0.0:
-                logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. input_ids' % len(current_output))
-            if torch.min(grads_token_type_ids) == torch.max(grads_token_type_ids) == 0.0:
-                logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_token_type_ids' % len(current_output))
-            if torch.min(grads_position_ids) == torch.max(grads_position_ids) == 0.0:
-                logger.warning('create explanations (i: %i): min==max==0.0 for gradients wrt. grads_position_ids' % len(current_output))
-            expl_input_ids = (torch.abs(grads_input_ids) * torch.abs(model_wte[input_ids.squeeze()])).sum(dim=-1)
-            expl_token_type_ids = (torch.abs(grads_token_type_ids) * torch.abs(model_wte[token_type_ids.squeeze()])).sum(dim=-1)
-            expl_position_ids = (torch.abs(grads_position_ids) * torch.abs(model_wpe[position_ids.squeeze()])).sum(dim=-1)
+            assert captured is not None, \
+                f'no captured inputs an gradients available to create explanations (generated token position: ' \
+                f'{len(current_output) + 1})'
+            expl_internal = (torch.abs(captured['grads'][0][0]) * torch.abs(captured['inputs'][0][0])).sum(dim=-1)
+
             last_ids = (instance["input_ids"], instance["token_type_ids"])
-            explanations.append({'input_ids': expl_input_ids.detach().cpu().numpy(),
-                                 'token_type_ids': expl_token_type_ids.cpu().detach().numpy(),
-                                 'position_ids': expl_position_ids.cpu().detach().numpy()})
+            explanations.append({'internal': expl_internal.detach().cpu().numpy()})
 
         if prev.item() in special_tokens_ids:
             eos = prev.item()
