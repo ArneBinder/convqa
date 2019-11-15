@@ -355,7 +355,7 @@ def ask():
                 explanation_texts[-1] = tokenizer.decode(out_ids)
                 explanation_texts_w_annotations[-1] = f'<span class="prediction">{html.escape(tokenizer.decode(out_ids))}</span>'
                 # just for compatibility
-                params['explanation'] = {'utterances': [], 'background': {}}
+                #params['explanation'] = {'utterances': [], 'background': {}}
                 params['explanation_annotations'] = {'utterances': [], 'background': {}}
                 # just for sanity check
                 params['explanation_texts'] = {'utterances': [], 'background': {}}
@@ -364,13 +364,13 @@ def ask():
                 for i, _ in enumerate(explanation_texts):
                     if special_tokens[i] in ['<user>', '<bot>']:
                         # compatibility
-                        params['explanation']['utterances'].append(explanation_texts_w_annotations[i])
+                        #params['explanation']['utterances'].append(explanation_texts_w_annotations[i])
                         params['explanation_annotations']['utterances'].append(explanation_annotations[i])
                         # sanity check (should equal params['utterances'])
                         params['explanation_texts']['utterances'].append(explanation_texts[i])
                     elif special_tokens[i] == '<background>':
                         # compatibility
-                        params['explanation']['background'][background_keys[n_background]] = explanation_texts_w_annotations[i]
+                        #params['explanation']['background'][background_keys[n_background]] = explanation_texts_w_annotations[i]
                         params['explanation_annotations']['background'][background_keys[n_background]] = explanation_annotations[i]
                         # sanity check
                         params['explanation_texts']['background'][background_keys[n_background]] = explanation_texts[i]
