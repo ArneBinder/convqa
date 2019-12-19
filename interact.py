@@ -310,6 +310,8 @@ def get_args(parser=ArgumentParser(), arguments=()):
                                                              'use e.g. "--root backend/"')
     parser.add_argument("--entity_linking_service_url", type=str, default='http://cloud.science-miner.com/nerd/service',
                         help="base url for the entity linking service (entity-fishing)")
+    parser.add_argument("--ssl-dir", type=str, default='',
+                        help="if not empty and in deploy mode, use <ssl-dir>/create ssl connection and")
 
     for parse_arg in arguments:
         parser.add_argument(**parse_arg)

@@ -570,6 +570,18 @@ if __name__ == "__main__":
     logger.info('Starting the API')
     if args.deploy:
         logger.info('use deployment server')
-        wsgi.server(eventlet.listen(('', args.port)), app)
+        if args.ssl_dir == '':
+            wsgi.server(eventlet.listen(('', args.port)), app)
+        else:
+            cert_fn = os.path.join(args.ssl_dir, 'cert.pem')
+            key_fn = os.path.join(args.ssl_dir, 'key.pem')
+            assert os.path.exists(cert_fn), f'Could not find ssl certificate file: {cert_fn}'
+            assert os.path.exists(key_fn), f'Could not find ssl key file: {key_fn}'
+            wsgi.server(eventlet.wrap_ssl(eventlet.listen(('', args.port)),
+                                          certfile=cert_fn,
+                                          keyfile=key_fn,
+                                          server_side=True),
+                        app)
+
     else:
         app.run(host='0.0.0.0', port=args.port, debug=True)
