@@ -577,6 +577,7 @@ if __name__ == "__main__":
             key_fn = os.path.join(args.ssl_dir, 'key.pem')
             assert os.path.exists(cert_fn), f'Could not find ssl certificate file: {cert_fn}'
             assert os.path.exists(key_fn), f'Could not find ssl key file: {key_fn}'
+            # taken from https://eventlet.net/doc/modules/wsgi.html#wsgi-ssl
             wsgi.server(eventlet.wrap_ssl(eventlet.listen(('', args.port)),
                                           certfile=cert_fn,
                                           keyfile=key_fn,

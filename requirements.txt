@@ -1,5 +1,5 @@
-# Create conda environment via:
-#   conda create -n huggingface_playground python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl -c pytorch -c conda-forge
+# RECOMMENDATION: create conda environment via:
+#   conda create -n convqa python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl flask -c pytorch -c conda-forge
 # NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
 #
 # To use openai-gpt model, install spacy model for tokenization:
@@ -26,6 +26,8 @@ pytorch-pretrained-bert >= 0.6.2
 tensorboardX
 tensorflow  # for tensorboardX
 flask # for interact endpoint
+eventlet # for interact endpoint (deploy)
+
 flask-socketio # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
 kafka-python # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
 eventlet # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
