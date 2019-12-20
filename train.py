@@ -19,8 +19,9 @@ from ignite.handlers import ModelCheckpoint
 from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
-from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer, GPT2DoubleHeadsModel,
-                                     GPT2Tokenizer, WEIGHTS_NAME, CONFIG_NAME, GPT2LMHeadModel, OpenAIGPTLMHeadModel)
+#from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer, GPT2DoubleHeadsModel,
+#                                     GPT2Tokenizer, WEIGHTS_NAME, CONFIG_NAME, GPT2LMHeadModel, OpenAIGPTLMHeadModel)
+from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel
 
 from utils import get_dataset
 
@@ -172,8 +173,9 @@ PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 #   <model name> -> (<Tokenizer class>, <DoubleHeadsModel class>, <LMHeadModel>)
 # see huggingface/pytorch-pretrained-bert for available model names
 MODELS = {
-    'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
-    'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
+    #'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
+    #'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
+    'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
 }
 
 logger = logging.getLogger(__file__)
@@ -415,6 +417,7 @@ def train():
     else:
         tokenizer.set_special_tokens(SPECIAL_TOKENS)
         model.set_num_special_tokens(len(tokenizer.special_tokens))
+    model.train()
     model.to(args.device)
     optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
     model_config = model.config
