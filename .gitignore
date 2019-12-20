@@ -2,6 +2,7 @@
 experiments/
 data/
 dataset_cache*
+corpora/
 runs/
 ParlAI/
 web/ssl/
