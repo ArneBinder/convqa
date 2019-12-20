@@ -16,18 +16,34 @@
 #   git clone https://github.com/NVIDIA/apex
 #   cd apex
 #   pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
-#
+# NOTE: apex requires nvcc to compile which is included in CUDA. If you intend to install CUDA 10.1, which matches the
+#   current PyTorch included CUDA version, you can execute the following (see https://developer.nvidia.com/cuda-10.1-download-archive-update2?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1804&target_type=deblocal):
+#		wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+#		sudo mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
+#		wget http://developer.download.nvidia.com/compute/cuda/10.1/Prod/local_installers/cuda-repo-ubuntu1804-10-1-local-10.1.243-418.87.00_1.0-1_amd64.deb
+#		sudo dpkg -i cuda-repo-ubuntu1804-10-1-local-10.1.243-418.87.00_1.0-1_amd64.deb
+#		sudo apt-key add /var/cuda-repo-10-1-local-10.1.243-418.87.00/7fa2af80.pub
+#		sudo apt update
+#		sudo apt -y install cuda
+# NOTE: to get other CUDA version (also for other distributions), see https://developer.nvidia.com/cuda-toolkit-archive
 #########################################################################################
 
 
 torch
-pytorch-ignite
 pytorch-pretrained-bert >= 0.6.2
+
+# training
+pytorch-ignite
+
+# monitoring
 tensorboardX
 tensorflow  # for tensorboardX
+
+# api (+static frontend)
 flask # for interact endpoint
 eventlet # for interact endpoint (deploy)
 
+#  frontent_only
 flask-socketio # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
 kafka-python # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
 eventlet # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
