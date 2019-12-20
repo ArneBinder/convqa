@@ -209,18 +209,18 @@ def process_explanations(explanations, last_ids, tokenizer, dump=False):
             expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n<div>%s</div>\n</body>\n</html>' \
                         % '\n'.join(['<div>%s</div>' % u for u in
                                      create_explanation_annotations(tokens=all_tokens, expl=explanations_sum[expl_type],
-                                                                    split_tokens=tokenizer.special_tokens.keys())])
+                                                                    split_tokens=tokenizer.all_special_tokens)])
             open('explanations_sum_%s.html' % expl_type, 'w').write(expl_html)
 
     # all summed together
-    res_with_spans = create_explanation_annotations(tokens=all_tokens, expl=sum(explanations_sum.values()), split_tokens=tokenizer.special_tokens.keys(), return_tuples=True)
+    res_with_spans = create_explanation_annotations(tokens=all_tokens, expl=sum(explanations_sum.values()), split_tokens=tokenizer.all_special_tokens, return_tuples=True)
     if dump:
         expl_html = '<!DOCTYPE html>\n<html>\n<head>\n<title>explanations</title>\n</head>\n<body>\n%s\n</body>\n</html>' \
                            % '\n'.join([f'<div>{html.escape(special_token)}:{u}</div>' for special_token, u in res_with_spans])
         open('explanations_sum.html', 'w').write(expl_html)
 
     res, annotations = create_explanation_annotations(tokens=all_tokens, expl=sum(explanations_sum.values()),
-                                                      split_tokens=tokenizer.special_tokens.keys(),
+                                                      split_tokens=tokenizer.all_special_tokens,
                                                       return_tuples=True,
                                                       return_spans=False)
     special_tokens, texts = zip(*res)
@@ -318,16 +318,16 @@ def ask():
             assert len(all_utterances) == len(all_utterance_types), f'number of utterance elements [{len(utterances)}] does not match ' \
                                                        f'number of utterance_types [{len(all_utterance_types)}]'
             utterance_types_encoded = []
-            allowed_hist_types = ', '.join(tokenizer.special_tokens.keys())
+            allowed_hist_types = ', '.join(tokenizer.all_special_tokens)
             for hist_type in all_utterance_types[-(2 * args.max_history + 1):]:
-                assert hist_type in tokenizer.special_tokens, f'Unknown type for utterances element: {hist_type}. ' \
+                assert hist_type in tokenizer.all_special_tokens, f'Unknown type for utterances element: {hist_type}. ' \
                                                               f'Use only these types: {allowed_hist_types}'
-                utterance_types_encoded.append(tokenizer.special_tokens[hist_type])
+                utterance_types_encoded.append(tokenizer.convert_tokens_to_ids(hist_type))
         else:
             # if no utterance types are available, assume the last utterance was from the user and then the type
             # alternates, i.e. starting from last utterance in reverse order: <user>, <bot>, <user>, <bot>, ...
-            utterance_types_encoded = [tokenizer.special_tokens[TYPE_USER] if (len(utterances) - i) % 2
-                                       else tokenizer.special_tokens[TYPE_BOT]
+            utterance_types_encoded = [tokenizer.convert_tokens_to_ids(TYPE_USER) if (len(utterances) - i) % 2
+                                       else tokenizer.convert_tokens_to_ids(TYPE_BOT)
                                        for i, h in enumerate(utterances)]
         # predict only if any utterances / user_input (was added to utterances) is available
         if len(utterances) > 0:
@@ -345,7 +345,7 @@ def ask():
                 all_tokens = [tokenizer.decode([tok]) for tok in last_ids[0]]
                 special_and_texts, explanation_annotations = create_explanation_annotations(tokens=all_tokens,
                                                                                             expl=sum(explanations_merged.values()),
-                                                                                            split_tokens=tokenizer.special_tokens.keys(),
+                                                                                            split_tokens=tokenizer.all_special_tokens,
                                                                                             return_tuples=True, return_spans=False)
                 special_tokens, explanation_texts = zip(*special_and_texts)
                 explanation_texts = list(explanation_texts)
@@ -395,7 +395,7 @@ def ask():
                         f'utterance [{u}] does not equal text returned by visualize_explanation ' \
                         f'[{params["explanation_text"]["utterances"][i]}]'
                 del params['explanation_texts']
-            utterance_types_encoded.append(tokenizer.special_tokens[TYPE_BOT])
+            utterance_types_encoded.append(tokenizer.convert_tokens_to_ids(TYPE_BOT))
             params['utterance_types'] = tokenizer.convert_ids_to_tokens(utterance_types_encoded)
             if eos is not None:
                 params['eos'] = tokenizer.convert_ids_to_tokens([eos])[0]

@@ -126,24 +126,29 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
-    special_tokens_ids = tokenizer.special_tokens.values()
+    #special_tokens_ids = tokenizer.special_tokens.values()
+    special_tokens_ids = tokenizer.all_special_ids  # TODO: test this!
     # causes strange behaviour:
-    #type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
-    #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
-    type_bot = tokenizer.special_tokens[TYPE_BOT]
-    type_user = tokenizer.special_tokens[TYPE_USER]
+    #bot_token_id = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
+    #user_token_id = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
+    #bot_token_id = tokenizer.special_tokens[TYPE_BOT]
+    #user_token_id = tokenizer.special_tokens[TYPE_USER]
+    bot_token_id = tokenizer.convert_tokens_to_ids(TYPE_BOT)
+    user_token_id = tokenizer.convert_tokens_to_ids(TYPE_USER)
+    #eos_token_id = tokenizer.eos_token_id
     # default to speaker2 if background is not present in model
-    type_background = tokenizer.special_tokens.get(TYPE_BACKGROUND, type_user)
+    #background_token_id = tokenizer.special_tokens.get(TYPE_BACKGROUND, user_token_id)
+    background_token_id = tokenizer.convert_tokens_to_ids(TYPE_BACKGROUND)
     #logger.debug('expected sequence length (without prediction): %i; max_allowed: %i (inclusive prediction)'
     #             % (len(list(chain(*(context + history)))) + len(history) + 1, max_sequence_length))
     context = []
     if background is not None:
         if isinstance(background, list) or isinstance(background, tuple):
-            context.extend([(type_background, b) for b in background])
+            context.extend([(background_token_id, b) for b in background])
         else:
-            context.append((type_background, background))
+            context.append((background_token_id, background))
     if personality is not None:
-        context.append((type_bot, personality))
+        context.append((bot_token_id, personality))
     if current_output is None:
         current_output = []
     assert len(utterances) == len(utterance_types), f'length of utterances [{len(utterances)}] has to be the ' \
@@ -156,7 +161,8 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
     for i in range(args.max_length):
         instance, sequence = build_input_from_segments(context=context,
                                                        history=utterances_with_types,
-                                                       reply=(type_bot, current_output), tokenizer=tokenizer, eos=None,
+                                                       reply=(bot_token_id, current_output), tokenizer=tokenizer,
+                                                       eos=None,
                                                        max_sequence_length=max_sequence_length)
         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
         assert l_trunc <= 0, 'The sequence was truncated. Please provide less context + history + question!'
@@ -181,10 +187,10 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
 
         # this captures only if capture_at_module != None
         with capture_inputs_with_gradients(capture_at_module) as captured:
-            logits = model(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
+            logits = model(input_ids=input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
-            if "gpt2" == args.model:
-                logits = logits[0]
+            #if "gpt2" == args.model:
+            logits = logits[0]
             logits_all = logits[0, -1, :] / args.temperature
             logits = top_filtering(logits_all.clone(), top_k=args.top_k, top_p=args.top_p)
             probs = F.softmax(logits, dim=-1)
@@ -261,7 +267,7 @@ def load_model(model_checkpoint, model_type):
     logger.info("Get pretrained model and tokenizer")
     if model_type not in MODELS:
         raise NotImplementedError('model "%s" not implemented. use one of %s' % (model_type, str(MODELS.keys)))
-    tokenizer_class, _, model_class = MODELS[model_type]
+    config_class, tokenizer_class, _, model_class = MODELS[model_type]
 
     _tokenizer = tokenizer_class.from_pretrained(model_checkpoint)
     _model = model_class.from_pretrained(model_checkpoint)

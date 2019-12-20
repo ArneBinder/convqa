@@ -12,16 +12,14 @@ import torch
 from torch import nn
 from torch.autograd import Function
 from torch.nn import CrossEntropyLoss
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, DistributedSampler
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
 from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
-#from pytorch_pretrained_bert import (OpenAIAdam, OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer, GPT2DoubleHeadsModel,
-#                                     GPT2Tokenizer, WEIGHTS_NAME, CONFIG_NAME, GPT2LMHeadModel, OpenAIGPTLMHeadModel)
-from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel
+from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel, AdamW, \
+    get_linear_schedule_with_warmup, GPT2Config
 
 from utils import get_dataset
 
@@ -159,14 +157,17 @@ class GPT2DoubleHeadsModelwithAdversarial(GPT2DoubleHeadsModel):
 
 TYPE_BOS = "<bos>"
 TYPE_EOS = "<eos>"
+TYPE_PAD = "<pad>"
 TYPE_BACKGROUND = "<background>"
 TYPE_BOT = "<bot>"
 TYPE_USER = "<user>"
 TYPE_BOT_DEPRECATED = "<speaker1>"
 TYPE_USER_DEPRECATED = "<speaker2>"
-TYPE_PAD = "<pad>"
-SPECIAL_TOKENS = [TYPE_BOS, TYPE_EOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
+#SPECIAL_TOKENS = [TYPE_BOS, TYPE_EOS, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER, TYPE_PAD]
+#SPECIAL_TOKENS = {'background_token': TYPE_BACKGROUND, 'bot_token': TYPE_BOT, 'user_token': TYPE_USER}
+#SPECIAL_TOKENS = [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]
+#MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
+MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 # implemented models:
@@ -175,7 +176,7 @@ PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 MODELS = {
     #'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
     #'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
-    'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
+    'gpt2': (GPT2Config, GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
 }
 
 logger = logging.getLogger(__file__)
@@ -202,7 +203,7 @@ def pad_dataset(dataset, padding=0):
 def build_input_from_segments(context, history, reply, tokenizer, lm_labels=False, eos=None,
                               return_strings=False, max_sequence_length=None):
     """ Build a sequence of input from 3 segments: persona, history and last reply """
-    bos = tokenizer.special_tokens[TYPE_BOS] if not return_strings else TYPE_BOS
+    bos = tokenizer.bos_token_id if not return_strings else tokenizer.bos_token
 
     instance = {}
     sequence = context + history + [reply]
@@ -251,13 +252,18 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
-    type_background = tokenizer.special_tokens[TYPE_BACKGROUND]
+    #background_token_id = tokenizer.special_tokens[TYPE_BACKGROUND]
     # causes strange behaviour (at least in interact.py):
-    #type_bot = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
-    #type_user = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
-    type_bot = tokenizer.special_tokens[TYPE_BOT]
-    type_user = tokenizer.special_tokens[TYPE_USER]
-    type_eos = tokenizer.special_tokens[TYPE_EOS]
+    #bot_token_id = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
+    #user_token_id = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
+    #bot_token_id = tokenizer.special_tokens[TYPE_BOT]
+    #user_token_id = tokenizer.special_tokens[TYPE_USER]
+    #eos_token_id = tokenizer.special_tokens[TYPE_EOS]
+    background_token_id = tokenizer.convert_tokens_to_ids(TYPE_BACKGROUND)
+    bot_token_id = tokenizer.convert_tokens_to_ids(TYPE_BOT)
+    user_token_id = tokenizer.convert_tokens_to_ids(TYPE_USER)
+    eos_token_id = tokenizer.eos_token_id
+
 
     for dataset_idx, dataset_path in enumerate(dataset_paths):
         #dataset_id = '<%s>' % os.path.basename(dataset_path)
@@ -279,17 +285,17 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
             for dialog in dataset:
                 context = []
                 if 'background' in dialog:
-                    utt = create_typed_utterance(utt=dialog['background'], default_type=type_background, allow_not_an_utterance=True)
+                    utt = create_typed_utterance(utt=dialog['background'], default_type=background_token_id, allow_not_an_utterance=True)
                     if utt is not None:
                         context.append(utt)
                     else:
                         # assume dialog['background'] is a list of backgrounds
                         for b in dialog['background']:
-                            context.append(create_typed_utterance(utt=b, default_type=type_background))
+                            context.append(create_typed_utterance(utt=b, default_type=background_token_id))
 
                 last_speaker = None
                 if 'personality' in dialog:
-                    context.append((type_bot, dialog['personality']))
+                    context.append((bot_token_id, dialog['personality']))
                 if len(context) > 0:
                     last_speaker = context[-1][0]
 
@@ -299,7 +305,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                     # beginning with user because added personality was from bot
                     # note: iterate alternating over full history to be consistent
                     for i, h in enumerate(utterance["history"]):
-                        last_speaker = type_bot if last_speaker == type_user else type_user
+                        last_speaker = bot_token_id if last_speaker == user_token_id else user_token_id
                         utterance["history"][i] = create_typed_utterance(utt=utterance["history"][i], default_type=last_speaker)
 
                     history = utterance["history"][-(2*args.max_history+1):]
@@ -307,14 +313,14 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                         last_speaker = history[-1][0]
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         # add speaker, if necessary
-                        candidate_speaker = type_user if last_speaker == type_bot else type_bot
+                        candidate_speaker = user_token_id if last_speaker == bot_token_id else bot_token_id
                         candidate = create_typed_utterance(utt=candidate, default_type=candidate_speaker)
                         # predict next words only for correct candidate (the last one)
                         lm_labels = bool(j == num_candidates-1)
                         instance, sequence = build_input_from_segments(context, history, candidate,
                                                                        tokenizer, lm_labels,
                                                                        max_sequence_length=max_sequence_length,
-                                                                       eos=type_eos)
+                                                                       eos=eos_token_id)
                         l_trunc = len(list(chain(*sequence))) - len(instance['input_ids'])
                         if l_trunc > 0:
                             counter_truncated[l_trunc] += 1
@@ -323,7 +329,8 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                         n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
-                    datasets[dataset_name]["adv_labels"].append([dataset_idx] * num_candidates)
+                    if 'adv_labels' in MODEL_INPUTS:
+                        datasets[dataset_name]["adv_labels"].append([dataset_idx] * num_candidates)
                     #context = [context[-1]] + context[:-1]  # permuted personalities
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
@@ -331,17 +338,18 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
-        dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(TYPE_PAD))
+        dataset = pad_dataset(dataset, padding=tokenizer.pad_token_id)
         for input_name in MODEL_INPUTS:
-            tensor = torch.tensor(dataset[input_name])
+            current_data = dataset[input_name]
+            tensor = torch.tensor(current_data)
             if input_name not in ["mc_labels", "adv_labels"]:
                 tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
             tensor_datasets[dataset_name].append(tensor)
 
     logger.info("Build train and validation dataloaders")
     train_dataset, valid_dataset = TensorDataset(*tensor_datasets["train"]), TensorDataset(*tensor_datasets["valid"])
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
-    valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
+    train_sampler = DistributedSampler(train_dataset) if args.distributed else None
+    valid_sampler = DistributedSampler(valid_dataset) if args.distributed else None
     train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=(not args.distributed))
     valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=args.valid_batch_size, shuffle=False)
 
@@ -350,7 +358,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     return train_loader, valid_loader, train_sampler, valid_sampler
 
 
-def train():
+def main():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
@@ -366,10 +374,13 @@ def train():
     parser.add_argument("--mc_coef", type=float, default=1.0, help="Multiple-choice loss coefficient")
     parser.add_argument("--adv_coef", type=float, default=1.0, help="Adversarial dataset prediction loss coefficient")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
+    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
+    parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--personality_permutations", type=int, default=1, help="Number of permutations of personality sentences")
     parser.add_argument("--eval_before_start", action='store_true', help="If true start with a first evaluation before training")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
+    #parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
+    parser.add_argument("--no_cuda", action='store_true', help="Avoid using CUDA when available")
     parser.add_argument("--fp16", type=str, default="", help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1, help="Local rank for distributed training (-1: not distributed)")
     parser.add_argument("--max_sequence_length", type=int, default=-1, help="If set, use this to manually restrict the sequence length. "
@@ -382,55 +393,25 @@ def train():
     logger.warning("Running process %d", args.local_rank)  # This is a logger.warning: it will be printed by all distributed processes
     logger.info("Arguments: %s", pformat(args))
 
-    n_gpu = 0
-
-    # Initialize distributed training if needed
     args.distributed = (args.local_rank != -1)
-    if args.distributed:
-        torch.cuda.set_device(args.local_rank)
-        args.device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend='nccl', init_method='env://')
-        n_gpu = 1
-    elif args.device == 'cuda':
-        n_gpu = torch.cuda.device_count()
 
-    logger.info("Prepare tokenizer, pretrained model and optimizer - add special tokens for fine-tuning")
+    logger.info("Prepare tokenizer and data")
     if not args.model:
         logger.warning('"model" parameter is not set! This is deprecated. Please use one of: %s. '
                        'To mimic deprecated behaviour, "model_checkpoint" will be used as "model"' % ', '.join(MODELS.keys()))
         args.model = args.model_checkpoint
     if args.model not in MODELS:
         raise NotImplementedError('model "%s" not implemented. use one of: %s' % (args.model, ', '.join(MODELS.keys())))
-    tokenizer_class, model_class, _ = MODELS[args.model]
+    config_class, tokenizer_class, model_class, _ = MODELS[args.model]
     if not args.model_checkpoint:
         args.model_checkpoint = args.model
-    dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
+    # for adversarial training
+    #dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
+    model_config = config_class.from_pretrained(args.model_checkpoint)
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
-    model = model_class.from_pretrained(args.model_checkpoint, num_adv_labels=len(dataset_ids))
 
-    if len(tokenizer.special_tokens) > 0:
-        for st in SPECIAL_TOKENS:
-            # TODO: implement merging (or just overwrite?)
-            assert st in tokenizer.special_tokens, \
-                'loaded tokenizer already has special tokens (%s), but does not contain required token "%s"' \
-                % (str(tokenizer.special_tokens), st)
-    else:
-        tokenizer.set_special_tokens(SPECIAL_TOKENS)
-        model.set_num_special_tokens(len(tokenizer.special_tokens))
-    model.train()
-    model.to(args.device)
-    optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
-    model_config = model.config
-
-    # Prepare model for FP16 and distributed training if needed (order is important, distributed should be the last)
-    if args.fp16:
-        from apex import amp  # Apex is only required if we use fp16 training
-        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16)
-    if args.distributed:
-        model = DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)  # device_ids will include all GPU devices by default
-        logger.info('train on %i GPUs' % n_gpu)
+    tokenizer.add_special_tokens({'bos_token': TYPE_BOS, 'eos_token': TYPE_EOS, 'pad_token': TYPE_PAD,
+                                  'additional_special_tokens': [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]})
 
     logger.info("Prepare datasets")
     max_sequence_length = model_config.n_ctx if args.max_sequence_length <= 0 else args.max_sequence_length
@@ -441,20 +422,90 @@ def train():
     train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer,
                                                                               max_sequence_length=max_sequence_length)
 
+    logger.info("Prepare pretrained model and optimizer - add special tokens for fine-tuning")
+
+    # Initialize distributed training if needed
+    # Setup CUDA, GPU & distributed training
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.n_gpu = torch.cuda.device_count()
+    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend='nccl')
+        args.n_gpu = 1
+    args.device = device
+
+    # Load pretrained model and tokenizer
+    if args.local_rank not in [-1, 0]:
+        torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
+
+    #model = model_class.from_pretrained(args.model_checkpoint, num_adv_labels=len(dataset_ids))    # for GPT2DoubleHeadsModelwithAdversarial
+    model = model_class.from_pretrained(args.model_checkpoint)
+    model.resize_token_embeddings(len(tokenizer))
+    model.to(args.device)
+
+    if args.local_rank == 0:
+        torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
+
+
+    ####################################################################################################################
+
+    # Prepare optimizer and schedule (linear warmup and decay)
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         'weight_decay': args.weight_decay},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    #optimizer = OpenAIAdam(model.parameters(), lr=args.lr)
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.lr)
+    # scheduler is set below (see ignite)
+    #scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
+    #                                            num_training_steps=len(train_loader) // args.train_batch_size + 1)
+
+    # Check if saved optimizer or scheduler states exist
+    if os.path.isfile(os.path.join(args.model_checkpoint, 'optimizer.pt')) and os.path.isfile(os.path.join(args.model_checkpoint, 'scheduler.pt')):
+        # Load in optimizer and scheduler states
+        # TODO: this needs to be dumped somewhere
+        optimizer.load_state_dict(torch.load(os.path.join(args.model_checkpoint, 'optimizer.pt')))
+        #scheduler.load_state_dict(torch.load(os.path.join(args.model_checkpoint, 'scheduler.pt')))
+
+    # Prepare model for FP16 and distributed training if needed (order is important, distributed should be the last)
+    if args.fp16:
+        try:
+            from apex import amp
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16)
+
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
+                                                          output_device=args.local_rank,
+                                                          find_unused_parameters=True)
+
     # Training function and trainer
     def update(engine, batch):
         model.train()
-        batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-        losses = model(*batch)
-        if n_gpu > 1: # mean() to average on multi-gpu.
+        batch = {MODEL_INPUTS[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
+        losses = model(**batch)[:2]
+        if args.n_gpu > 1: # mean() to average on multi-gpu.
             for i in range(len(losses)):
                 losses[i] = losses[i].mean()
         lm_loss, mc_loss = losses[0], losses[1]
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
-        loss_wo_adv = loss.clone()
-        if len(losses) > 2:
-            adv_loss = losses[2]
-            loss += (adv_loss * args.adv_coef) / args.gradient_accumulation_steps
+
+        if 'adv_labels' in MODEL_INPUTS:
+            raise NotImplemented
+            #loss_wo_adv = loss.clone()
+            #if len(losses) > 2:
+            #    adv_loss = losses[2]
+            #    loss += (adv_loss * args.adv_coef) / args.gradient_accumulation_steps
 
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -465,8 +516,9 @@ def train():
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
         if engine.state.iteration % args.gradient_accumulation_steps == 0:
             optimizer.step()
+            #scheduler.step()  # Update learning rate schedule # already DONE below!
             optimizer.zero_grad()
-        return loss.item(), loss_wo_adv.item()
+        return loss.item(),  #loss_wo_adv.item()
     trainer = Engine(update)
 
     # Evaluation function and evaluator (evaluator output is the input of the metrics)
@@ -474,10 +526,12 @@ def train():
         model.eval()
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-            input_ids, mc_token_ids, lm_labels, mc_labels, adv_labels, token_type_ids = batch
+            #input_ids, mc_token_ids, lm_labels, mc_labels, adv_labels, token_type_ids = batch
+            input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
+
             # ATTENTION: requires branch "gpt-2-special-tokens" of "https://github.com/ArneBinder/pytorch-pretrained-BERT"!
             logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()).replace('<pad>', ''))
-            model_outputs = model(input_ids, mc_token_ids, token_type_ids=token_type_ids)
+            model_outputs = model(input_ids=input_ids, mc_token_ids=mc_token_ids, token_type_ids=token_type_ids)
             lm_logits, mc_logits = model_outputs[0], model_outputs[1]  # So we can also use GPT2 outputs
             lm_logits_flat_shifted = lm_logits[..., :-1, :].contiguous().view(-1, lm_logits.size(-1))
             lm_labels_flat_shifted = lm_labels[..., 1:].contiguous().view(-1)
@@ -502,8 +556,10 @@ def train():
 
     # Prepare metrics - note how we compute distributed metrics 
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss")
-    RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/o_adv")
-    RunningAverage(output_transform=lambda x: x[0]-x[1]).attach(trainer, "loss_only_adv")
+    if 'adv_labels' in MODEL_INPUTS:
+        RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/o_adv")
+        RunningAverage(output_transform=lambda x: x[0]-x[1]).attach(trainer, "loss_only_adv")
+        # TODO: also adapt metrics below for adv_loss?
     metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-1), output_transform=lambda x: (x[0][0], x[1][0])),
                "accuracy": Accuracy(output_transform=lambda x: (x[0][1], x[1][1]))}
     metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args),
@@ -520,8 +576,9 @@ def train():
 
         tb_logger = TensorboardLogger(log_dir=None)
         tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss"]), event_name=Events.ITERATION_COMPLETED)
-        tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/o_adv"]), event_name=Events.ITERATION_COMPLETED)
-        tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_only_adv"]), event_name=Events.ITERATION_COMPLETED)
+        if 'adv_labels' in MODEL_INPUTS:
+            tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/o_adv"]), event_name=Events.ITERATION_COMPLETED)
+            tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_only_adv"]), event_name=Events.ITERATION_COMPLETED)
         tb_logger.attach(trainer, log_handler=OptimizerParamsHandler(optimizer), event_name=Events.ITERATION_STARTED)
         tb_logger.attach(evaluator, log_handler=OutputHandler(tag="validation", metric_names=list(metrics.keys()), another_engine=trainer), event_name=Events.EPOCH_COMPLETED)
 
@@ -533,6 +590,10 @@ def train():
         getattr(model, 'module', model).config.to_json_file(os.path.join(tb_logger.writer.log_dir, CONFIG_NAME))
         tokenizer.save_vocabulary(tb_logger.writer.log_dir)
 
+        #logger.debug("Saving optimizer and scheduler states to %s", tb_logger.writer.log_dir)
+        #torch.save(optimizer.state_dict(), os.path.join(tb_logger.writer.log_dir, 'optimizer.pt'))
+        #torch.save(scheduler.state_dict(), os.path.join(tb_logger.writer.log_dir, 'scheduler.pt'))
+
     # Run the training
     trainer.run(train_loader, max_epochs=args.n_epochs)
 
@@ -541,5 +602,6 @@ def train():
         os.rename(checkpoint_handler._saved[-1][1][-1], os.path.join(tb_logger.writer.log_dir, WEIGHTS_NAME))  # TODO: PR in ignite to have better access to saved file paths (cleaner)
         tb_logger.close()
 
+
 if __name__ == "__main__":
-    train()
+    main()
