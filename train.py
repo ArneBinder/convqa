@@ -284,36 +284,42 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                 num_candidates = min(args.num_candidates, num_candidates)
             for dialog in dataset:
                 context = []
+                last_context_speaker = None
                 if 'background' in dialog:
-                    utt = create_typed_utterance(utt=dialog['background'], default_type=background_token_id, allow_not_an_utterance=True)
-                    if utt is not None:
-                        context.append(utt)
+                    # pass through, if dialog['background'] is a list
+                    background = create_typed_utterance(utt=dialog['background'], default_type=background_token_id,
+                                                        allow_not_an_utterance=True)
+                    if background is not None:
+                        context.append(background)
                     else:
                         # assume dialog['background'] is a list of backgrounds
-                        for b in dialog['background']:
-                            context.append(create_typed_utterance(utt=b, default_type=background_token_id))
+                        for bg in dialog['background']:
+                            context.append(create_typed_utterance(utt=bg, default_type=background_token_id))
 
-                last_speaker = None
                 if 'personality' in dialog:
                     context.append((bot_token_id, dialog['personality']))
-                if len(context) > 0:
-                    last_speaker = context[-1][0]
+                    if len(context) > 0:
+                        last_context_speaker = context[-1][0]
 
                 #for _ in range(args.personality_permutations):
                 for utterance in dialog["utterances"]:
+                    # may be None (no personality)
+                    current_speaker = last_context_speaker
                     # add speakers to history, if necessary
                     # beginning with user because added personality was from bot
                     # note: iterate alternating over full history to be consistent
                     for i, h in enumerate(utterance["history"]):
-                        last_speaker = bot_token_id if last_speaker == user_token_id else user_token_id
-                        utterance["history"][i] = create_typed_utterance(utt=utterance["history"][i], default_type=last_speaker)
-
+                        current_speaker = bot_token_id if current_speaker == user_token_id else user_token_id
+                        utterance["history"][i] = create_typed_utterance(utt=utterance["history"][i],
+                                                                         default_type=current_speaker)
+                    # truncate history
                     history = utterance["history"][-(2*args.max_history+1):]
-                    if len(history) > 0:
-                        last_speaker = history[-1][0]
+                    # get previous speaker from history, if available, or take context speaker (may be None)
+                    previous_speaker = history[-1][0] if len(history) > 0 else last_context_speaker
+                    # switch previous speaker to get current one (default to <uses>, if no context speaker is set)
+                    candidate_speaker = bot_token_id if previous_speaker == user_token_id else user_token_id
                     for j, candidate in enumerate(utterance["candidates"][-num_candidates:]):
                         # add speaker, if necessary
-                        candidate_speaker = user_token_id if last_speaker == bot_token_id else bot_token_id
                         candidate = create_typed_utterance(utt=candidate, default_type=candidate_speaker)
                         # predict next words only for correct candidate (the last one)
                         lm_labels = bool(j == num_candidates-1)
