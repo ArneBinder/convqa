@@ -501,8 +501,6 @@ def main():
         batch = {MODEL_INPUTS[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
         losses = model(**batch)[:2]
         if args.n_gpu > 1: # mean() to average on multi-gpu.
-            print(type(losses))
-            print(losses)
             losses = list(losses)
             for i in range(len(losses)):
                 losses[i] = losses[i].mean()
@@ -559,7 +557,7 @@ def main():
         trainer.add_event_handler(Events.EPOCH_STARTED, lambda engine: train_sampler.set_epoch(engine.state.epoch))
         evaluator.add_event_handler(Events.EPOCH_STARTED, lambda engine: valid_sampler.set_epoch(engine.state.epoch))
 
-    # Linearly decrease the learning rate from lr to zero
+    # Linearly decrease the learning rate from lr to zero (scheduler)
     scheduler = PiecewiseLinear(optimizer, "lr", [(0, args.lr), (args.n_epochs * len(train_loader), 0.0)])
     trainer.add_event_handler(Events.ITERATION_STARTED, scheduler)
 
