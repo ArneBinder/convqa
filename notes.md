@@ -274,7 +274,7 @@ cmd_endpoint `CUDA_VISIBLE_DEVICES=1 python web/endpoint.py --model gpt2 --model
 ### train with transformers @ CoQA + personaCHAT + SQuAD
 @serv-9208
 git branch: transformers
-git commit: 452e464756eca2651ce78a5e225f0db2682e7ec1
+git commit: 2bb94cf8d72e284bb2dcedb0defe708d1afe22be
 extract10 cmd: `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path corpora/PersonaCHAT/personachat_self_original_extract10.json,corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json,corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --seed 42 >train0.log 2>&1`
 INFO:ignite.engine.engine.Engine:Epoch[1] Complete. Time taken: 00:01:47
 Epoch: [638/638] 100%|██████████, loss=2.48 [04:09<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 00:01:47
