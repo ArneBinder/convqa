@@ -18,6 +18,7 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, Output
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel, AdamW, \
     GPT2Config
 
+from convqa.modeling import GPT2DoubleHeadsModelwithAdversarialNew
 from convqa.utils import get_dataset
 
 
@@ -33,7 +34,8 @@ TYPE_USER_DEPRECATED = "<speaker2>"
 #SPECIAL_TOKENS = {'background_token': TYPE_BACKGROUND, 'bot_token': TYPE_BOT, 'user_token': TYPE_USER}
 #SPECIAL_TOKENS = [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]
 #MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+#MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+#MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 # implemented models:
@@ -41,8 +43,11 @@ PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 # see huggingface/pytorch-pretrained-bert for available model names
 MODELS = {
     #'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
-    #'gpt2': (GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
+    #'gpt2': (GPT2Config, GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
     'gpt2': (GPT2Config, GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
+}
+ADV_MODELS = {
+    GPT2DoubleHeadsModel: GPT2DoubleHeadsModelwithAdversarialNew
 }
 
 logger = logging.getLogger(__file__)
@@ -114,7 +119,11 @@ def create_typed_utterance(utt, default_type, allow_not_an_utterance=False):
                          % (str(utt), str(default_type)))
 
 
-def get_data_loaders(args, tokenizer, max_sequence_length=None):
+def get_dataset_token(dataset_path):
+    return f'<{os.path.basename(dataset_path)}>'
+
+
+def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=None):
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
@@ -130,13 +139,12 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     user_token_id = tokenizer.convert_tokens_to_ids(TYPE_USER)
     eos_token_id = tokenizer.eos_token_id
 
-
-    for dataset_idx, dataset_path in enumerate(dataset_paths):
-        #dataset_id = '<%s>' % os.path.basename(dataset_path)
-        #assert dataset_id in tokenizer.special_tokens, \
-        #    'dataset_id=%s not found in tokenizer.special_tokens=[%s], but is required as eos token.' \
-        #    % (dataset_id, ', '.join(tokenizer.special_tokens.kyes()))
-        #dataset_id = tokenizer.special_tokens[dataset_id]
+    for dataset_path in dataset_paths:
+        dataset_id = None
+        if args.adversarial_dataset_prediction:
+            dataset_token = get_dataset_token(dataset_path)
+            dataset_id = tokenizer.convert_tokens_to_ids(dataset_token)
+            assert dataset_id is not None, f'dataset_id for dataset={dataset_token} not found in vocabulary'
 
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache)
 
@@ -201,8 +209,8 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
                         n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
-                    if 'adv_labels' in MODEL_INPUTS:
-                        datasets[dataset_name]["adv_labels"].append([dataset_idx] * num_candidates)
+                    if args.adversarial_dataset_prediction:
+                        datasets[dataset_name]["adv_labels"].append([dataset_id] * num_candidates)
                     #context = [context[-1]] + context[:-1]  # permuted personalities
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
@@ -211,7 +219,7 @@ def get_data_loaders(args, tokenizer, max_sequence_length=None):
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
         dataset = pad_dataset(dataset, padding=tokenizer.pad_token_id)
-        for input_name in MODEL_INPUTS:
+        for input_name in model_input_names:
             current_data = dataset[input_name]
             tensor = torch.tensor(current_data)
             if input_name not in ["mc_labels", "adv_labels"]:
@@ -258,6 +266,8 @@ def main():
     parser.add_argument("--max_sequence_length", type=int, default=-1, help="If set, use this to manually restrict the sequence length. "
                                                                             "This might be helpful to save resources (memory). "
                                                                             "If not set, this is looked up from the model config (n_ctx value).")
+    parser.add_argument("--adversarial_dataset_prediction", action='store_true',
+                        help="Set to train with adversarial dataset prediction")
     parser.add_argument("--seed", type=int, default=None, help='set random seed')
     args = parser.parse_args()
 
@@ -281,13 +291,23 @@ def main():
     config_class, tokenizer_class, model_class, _ = MODELS[args.model]
     if not args.model_checkpoint:
         args.model_checkpoint = args.model
-    # for adversarial training
-    #dataset_ids = ['<%s>' % os.path.basename(dataset_path) for dataset_path in args.dataset_path.split(',')]
+
     model_config = config_class.from_pretrained(args.model_checkpoint)
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
+    additional_special_tokens = [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]
+    # for adversarial training
+    if args.adversarial_dataset_prediction:
+        additional_special_tokens.extend([get_dataset_token(dataset_path) for dataset_path in args.dataset_path.split(',')])
+        if model_class not in ADV_MODELS.values():
+            assert model_class in ADV_MODELS, f'no adversarial model implemented for model class: {model_class.__name__}'
+            model_class = ADV_MODELS[model_class]
+        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
+    else:
+        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+
     tokenizer.add_special_tokens({'bos_token': TYPE_BOS, 'eos_token': TYPE_EOS, 'pad_token': TYPE_PAD,
-                                  'additional_special_tokens': [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]})
+                                  'additional_special_tokens': additional_special_tokens})
 
     logger.info("Prepare datasets")
     max_sequence_length = model_config.n_ctx if args.max_sequence_length <= 0 else args.max_sequence_length
@@ -295,7 +315,8 @@ def main():
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model_config.n_ctx)
-    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args, tokenizer,
+    train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args=args, tokenizer=tokenizer,
+                                                                              model_input_names=model_input_names,
                                                                               max_sequence_length=max_sequence_length)
 
     logger.info("Prepare pretrained model and optimizer - add special tokens for fine-tuning")
@@ -368,7 +389,7 @@ def main():
     # Training function and trainer
     def update(engine, batch):
         model.train()
-        batch = {MODEL_INPUTS[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
+        batch = {model_input_names[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
         losses = model(**batch)[:2]
         if args.n_gpu > 1: # mean() to average on multi-gpu.
             losses = list(losses)
@@ -377,8 +398,8 @@ def main():
         lm_loss, mc_loss = losses[0], losses[1]
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
 
-        if 'adv_labels' in MODEL_INPUTS:
-            raise NotImplemented
+        if args.adversarial_dataset_prediction:
+            raise NotImplementedError
             #loss_wo_adv = loss.clone()
             #if len(losses) > 2:
             #    adv_loss = losses[2]
@@ -432,7 +453,7 @@ def main():
 
     # Prepare metrics - note how we compute distributed metrics 
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss")
-    if 'adv_labels' in MODEL_INPUTS:
+    if args.adversarial_dataset_prediction:
         RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/o_adv")
         RunningAverage(output_transform=lambda x: x[0]-x[1]).attach(trainer, "loss_only_adv")
         # TODO: also adapt metrics below for adv_loss?
@@ -452,7 +473,7 @@ def main():
 
         tb_logger = TensorboardLogger(log_dir=None)
         tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss"]), event_name=Events.ITERATION_COMPLETED)
-        if 'adv_labels' in MODEL_INPUTS:
+        if args.adversarial_dataset_prediction:
             tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/o_adv"]), event_name=Events.ITERATION_COMPLETED)
             tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_only_adv"]), event_name=Events.ITERATION_COMPLETED)
         tb_logger.attach(trainer, log_handler=OptimizerParamsHandler(optimizer), event_name=Events.ITERATION_STARTED)
