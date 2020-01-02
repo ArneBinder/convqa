@@ -30,7 +30,8 @@ def download_pretrained_model():
 def get_dataset(tokenizer, dataset_path, dataset_cache=None, as_strings=False):
     """ Get PERSONACHAT from S3 """
     dataset_path = dataset_path or PERSONACHAT_URL
-    dataset_cache = dataset_cache + '_' + dataset_path.split('/')[-1].replace('.json', '') + '_' + type(tokenizer).__name__  # Do avoid using GPT cache for GPT-2 and vice-versa
+    os.makedirs(dataset_cache, exist_ok=True)
+    dataset_cache = dataset_cache + '/' + dataset_path.split('/')[-1].replace('.json', '') + '_' + type(tokenizer).__name__  # Do avoid using GPT cache for GPT-2 and vice-versa
     if as_strings:
         dataset_cache += '_STRINGS'
 

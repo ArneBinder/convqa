@@ -1,10 +1,10 @@
 .vscode
 experiments/
 data/
-dataset_cache*
+dataset_cache/
 corpora/
 runs/
 ParlAI/
-web/ssl/
+convqa/web/ssl/
 __pycache__
 .idea

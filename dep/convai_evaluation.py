@@ -20,9 +20,9 @@ from projects.convai2.build_dict import build_dict
 from pytorch_pretrained_bert import OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer, GPT2Tokenizer, \
     GPT2DoubleHeadsModel, GPT2LMHeadModel
 
-from train import build_input_from_segments, pad_dataset, SPECIAL_TOKENS
-from utils import download_pretrained_model, AttrDict
-from interact import sample_sequence
+from convqa.train import build_input_from_segments, pad_dataset, SPECIAL_TOKENS
+from convqa.utils import download_pretrained_model, AttrDict
+from convqa.interact import sample_sequence
 
 class TransformerAgent(Agent):
     @staticmethod

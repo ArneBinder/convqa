@@ -10,7 +10,7 @@ import numpy as np
 import plac
 from tqdm import tqdm
 
-from interact import create_sentencizer
+from convqa.interact import create_sentencizer
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
@@ -324,7 +324,7 @@ def convert_hotpotqa_wikidump_to_dict(fn, fields=('text', 'title')):
 
 
 def dummy_tokenize():
-    from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
+    from pytorch_pretrained_bert import OpenAIGPTTokenizer
 
     # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
     import logging
