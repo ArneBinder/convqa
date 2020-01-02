@@ -4,15 +4,12 @@
 import json
 import logging
 import os
-import pickle
-import re
 import tarfile
 import tempfile
 
-import requests
 import torch
 
-from pytorch_pretrained_bert import cached_path
+from transformers import cached_path
 
 PERSONACHAT_URL = "https://s3.amazonaws.com/datasets.huggingface.co/personachat/personachat_self_original.json"
 HF_FINETUNED_MODEL = "https://s3.amazonaws.com/models.huggingface.co/transfer-learning-chatbot/finetuned_chatbot_gpt.tar.gz"
