@@ -287,7 +287,7 @@ extract10 cmd (multi-gpu training): `CUDA_VISIBLE_DEVICES=0,1,2,3 python ./train
 start server @gpu0 @ screen train1:
 ```
 screen -S convqa_backend_GPU1
-conda activate convqa_backend_GPU1
+conda activate convqa
 CUDA_VISIBLE_DEVICES=1 python web/backend.py --model gpt2 --model_checkpoint runs/Jul15_21-05-16_serv-9200 --max_history 2 --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service --port 8100 --deploy
 ```
 
