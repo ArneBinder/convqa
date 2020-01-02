@@ -588,7 +588,7 @@ def main():
 
         torch.save(args, tb_logger.writer.log_dir + '/model_training_args.bin')
         getattr(model, 'module', model).config.to_json_file(os.path.join(tb_logger.writer.log_dir, CONFIG_NAME))
-        tokenizer.save_vocabulary(tb_logger.writer.log_dir)
+        tokenizer.save_pretrained(tb_logger.writer.log_dir)
 
         #logger.debug("Saving optimizer and scheduler states to %s", tb_logger.writer.log_dir)
         #torch.save(optimizer.state_dict(), os.path.join(tb_logger.writer.log_dir, 'optimizer.pt'))
