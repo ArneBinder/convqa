@@ -501,6 +501,9 @@ def main():
         batch = {MODEL_INPUTS[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
         losses = model(**batch)[:2]
         if args.n_gpu > 1: # mean() to average on multi-gpu.
+            print(type(losses))
+            print(losses)
+            losses = list(losses)
             for i in range(len(losses)):
                 losses[i] = losses[i].mean()
         lm_loss, mc_loss = losses[0], losses[1]
