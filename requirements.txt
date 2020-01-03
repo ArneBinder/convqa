@@ -1,5 +1,5 @@
 # RECOMMENDATION: create conda environment via:
-#   conda create -n convqa python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6  blas=*=mkl flask -c pytorch -c conda-forge
+#   conda create -n convqa python=3 spacy ftfy pytorch pytorch-pretrained-bert ignite tensorboardx=1.6 scikit-learn blas=*=mkl flask eventlet -c pytorch -c conda-forge
 # NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
 #
 # To use openai-gpt model, install spacy model for tokenization:
@@ -30,12 +30,13 @@
 
 
 torch
-pytorch-pretrained-bert >= 0.6.2
+transformers
 
 # training
 pytorch-ignite
 
-# monitoring
+# monitoring (training)
+scikit-learn
 tensorboardX
 tensorflow  # for tensorboardX
 
