@@ -18,7 +18,7 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, Output
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel, AdamW, \
     GPT2Config
 
-from convqa.modeling import GPT2DoubleHeadsModelwithAdversarialNew
+from convqa.modeling import GPT2MultiHeadsAdversarialClModel
 from convqa.utils import get_dataset
 
 
@@ -45,9 +45,10 @@ MODELS = {
     #'openai-gpt': (OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel, OpenAIGPTLMHeadModel),
     #'gpt2': (GPT2Config, GPT2Tokenizer, GPT2DoubleHeadsModelwithAdversarial, GPT2LMHeadModel),
     'gpt2': (GPT2Config, GPT2Tokenizer, GPT2DoubleHeadsModel, GPT2LMHeadModel),
+    #'gpt2': (GPT2Config, GPT2Tokenizer, GPT2MultiHeadsAdversarialClModel, GPT2LMHeadModel),
 }
 ADV_MODELS = {
-    GPT2DoubleHeadsModel: GPT2DoubleHeadsModelwithAdversarialNew
+    GPT2DoubleHeadsModel: GPT2MultiHeadsAdversarialClModel
 }
 
 logger = logging.getLogger(__file__)
@@ -145,6 +146,8 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
             dataset_token = get_dataset_token(dataset_path)
             dataset_id = tokenizer.convert_tokens_to_ids(dataset_token)
             assert dataset_id is not None, f'dataset_id for dataset={dataset_token} not found in vocabulary'
+            # TODO
+            raise NotImplementedError("translate dataset_id to [0, ..., num_datasets_in_vocab-1]")
 
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache)
 
@@ -210,7 +213,7 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
                     if args.adversarial_dataset_prediction:
-                        datasets[dataset_name]["adv_labels"].append([dataset_id] * num_candidates)
+                        datasets[dataset_name]["cl_labels"].append([dataset_id] * num_candidates)
                     #context = [context[-1]] + context[:-1]  # permuted personalities
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
@@ -222,7 +225,7 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
         for input_name in model_input_names:
             current_data = dataset[input_name]
             tensor = torch.tensor(current_data)
-            if input_name not in ["mc_labels", "adv_labels"]:
+            if input_name not in ["mc_labels", "cl_labels"]:
                 tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
             tensor_datasets[dataset_name].append(tensor)
 
@@ -298,13 +301,20 @@ def main():
     additional_special_tokens = [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]
     # for adversarial training
     if args.adversarial_dataset_prediction:
-        additional_special_tokens.extend([get_dataset_token(dataset_path) for dataset_path in args.dataset_path.split(',')])
-        if model_class not in ADV_MODELS.values():
-            assert model_class in ADV_MODELS, f'no adversarial model implemented for model class: {model_class.__name__}'
-            model_class = ADV_MODELS[model_class]
-        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "adv_labels", "token_type_ids"]
+        dataset_tokens = [get_dataset_token(dataset_path) for dataset_path in args.dataset_path.split(',')]
+        additional_special_tokens.extend(dataset_tokens)
+        #if model_class not in ADV_MODELS.values():
+        assert model_class in ADV_MODELS, f'no adversarial model implemented for model class: {model_class.__name__}'
+        model_class = ADV_MODELS[model_class]
+        model_config.cl_num_labels = {'cl_labels': len(dataset_tokens)}
+        model_config.cl_is_adversarial = {'cl_labels': True}
+        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "cl_labels", "token_type_ids"]
+        # not yet used
+        model_output_names = ["lm_loss", "mc_loss", "cl_loss_0_adv", "lm_logits", "mc_logits", "cl_logits_0_adv", "presents"]
     else:
         model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+        # not yet used
+        model_output_names = ["lm_loss", "mc_loss", "lm_logits", "mc_logits", "presents"]
 
     tokenizer.add_special_tokens({'bos_token': TYPE_BOS, 'eos_token': TYPE_EOS, 'pad_token': TYPE_PAD,
                                   'additional_special_tokens': additional_special_tokens})
@@ -337,7 +347,7 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
-    #model = model_class.from_pretrained(args.model_checkpoint, num_adv_labels=len(dataset_ids))    # for GPT2DoubleHeadsModelwithAdversarial
+    #model = model_class.from_pretrained(args.model_checkpoint, num_cl_labels=len(dataset_ids))    # for GPT2DoubleHeadsModelwithAdversarial
     model = model_class.from_pretrained(args.model_checkpoint)
     model.resize_token_embeddings(len(tokenizer))
     model.to(args.device)
@@ -390,7 +400,8 @@ def main():
     def update(engine, batch):
         model.train()
         batch = {model_input_names[i]: input_tensor.to(args.device) for i, input_tensor in enumerate(batch)}
-        losses = model(**batch)[:2]
+        model_output = model(**batch)
+        losses = model_output[:3] if args.adversarial_dataset_prediction else model_output[:2]
         if args.n_gpu > 1: # mean() to average on multi-gpu.
             losses = list(losses)
             for i in range(len(losses)):
@@ -398,12 +409,11 @@ def main():
         lm_loss, mc_loss = losses[0], losses[1]
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
 
+        # handle adversarial loss
+        loss_wo_adv = loss.clone()
         if args.adversarial_dataset_prediction:
-            raise NotImplementedError
-            #loss_wo_adv = loss.clone()
-            #if len(losses) > 2:
-            #    adv_loss = losses[2]
-            #    loss += (adv_loss * args.adv_coef) / args.gradient_accumulation_steps
+            adv_loss = model_output[2]
+            loss += (adv_loss * args.adv_coef) / args.gradient_accumulation_steps
 
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -416,7 +426,7 @@ def main():
             optimizer.step()
             #scheduler.step()  # Update learning rate schedule # already DONE below!
             optimizer.zero_grad()
-        return loss.item(),  #loss_wo_adv.item()
+        return loss_wo_adv.item(), loss.item()
     trainer = Engine(update)
 
     # Evaluation function and evaluator (evaluator output is the input of the metrics)
@@ -424,8 +434,10 @@ def main():
         model.eval()
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-            #input_ids, mc_token_ids, lm_labels, mc_labels, adv_labels, token_type_ids = batch
-            input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
+            if args.adversarial_dataset_prediction:
+                input_ids, mc_token_ids, lm_labels, mc_labels, cl_labels, token_type_ids = batch
+            else:
+                input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
 
             logger.debug(tokenizer.decode(input_ids[0, -1, :].tolist()).replace(TYPE_PAD, ''))
             model_outputs = model(input_ids=input_ids, mc_token_ids=mc_token_ids, token_type_ids=token_type_ids)
@@ -454,8 +466,8 @@ def main():
     # Prepare metrics - note how we compute distributed metrics 
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss")
     if args.adversarial_dataset_prediction:
-        RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/o_adv")
-        RunningAverage(output_transform=lambda x: x[0]-x[1]).attach(trainer, "loss_only_adv")
+        RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/_adv")
+        RunningAverage(output_transform=lambda x: x[1]-x[0]).attach(trainer, "loss_only_adv")
         # TODO: also adapt metrics below for adv_loss?
     metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-1), output_transform=lambda x: (x[0][0], x[1][0])),
                "accuracy": Accuracy(output_transform=lambda x: (x[0][1], x[1][1]))}
@@ -474,7 +486,7 @@ def main():
         tb_logger = TensorboardLogger(log_dir=None)
         tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss"]), event_name=Events.ITERATION_COMPLETED)
         if args.adversarial_dataset_prediction:
-            tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/o_adv"]), event_name=Events.ITERATION_COMPLETED)
+            tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_w/_adv"]), event_name=Events.ITERATION_COMPLETED)
             tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss_only_adv"]), event_name=Events.ITERATION_COMPLETED)
         tb_logger.attach(trainer, log_handler=OptimizerParamsHandler(optimizer), event_name=Events.ITERATION_STARTED)
         tb_logger.attach(evaluator, log_handler=OutputHandler(tag="validation", metric_names=list(metrics.keys()), another_engine=trainer), event_name=Events.EPOCH_COMPLETED)

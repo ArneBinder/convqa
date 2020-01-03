@@ -139,7 +139,7 @@ class GPT2DoubleHeadsModelwithAdversarial(GPT2DoubleHeadsModel):
         return lm_logits, mc_logits, presents
 
 
-class GPT2DoubleHeadsModelwithAdversarialNew(GPT2PreTrainedModel):
+class GPT2MultiHeadsAdversarialClModel(GPT2PreTrainedModel):
     r"""
         **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
@@ -203,26 +203,25 @@ class GPT2DoubleHeadsModelwithAdversarialNew(GPT2PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(GPT2DoubleHeadsModelwithAdversarialNew, self).__init__(config)
+        super(GPT2MultiHeadsAdversarialClModel, self).__init__(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        if not hasattr(config, 'num_labels_multi'):
-            config.num_labels_multi = {}
-        config.num_labels_multi['mc_labels'] = config.num_labels
-        if not hasattr(config, 'adv_labels_multi'):
-            config.adv_labels_multi = {k: False for k in config.num_labels_multi.keys()}
-        self.adv_labels_multi = config.adv_labels_multi
+        self.multiple_choice_head = SequenceSummary(config)
+
+        if not hasattr(config, 'cl_num_labels'):
+            config.cl_num_labels = {}
+        if not hasattr(config, 'cl_is_adversarial'):
+            config.cl_is_adversarial = {}
+        self.cl_is_adversarial = config.cl_is_adversarial
 
         _num_labels = config.num_labels
-        self.multiple_choice_heads = {}
-        for input_name, num_labels in config.num_labels_multi.items():
+        self.cl_heads = {}
+        for input_name, num_labels in config.cl_num_labels.items():
             config.num_labels = num_labels
-            self.multiple_choice_heads[input_name] = SequenceSummary(config)
+            self.cl_heads[input_name] = SequenceSummary(config)
 
-        self.multiple_choice_head = self.multiple_choice_heads['mc_labels']
-
-        config.num_labels = _num_labels
+        config.num_labels = 1
 
         self.init_weights()
 
@@ -230,8 +229,8 @@ class GPT2DoubleHeadsModelwithAdversarialNew(GPT2PreTrainedModel):
         return self.lm_head
 
     def forward(self, input_ids=None, past=None, attention_mask=None, token_type_ids=None, position_ids=None,
-                head_mask=None, inputs_embeds=None,
-                mc_token_ids=None, lm_labels=None, mc_labels=None, adv_labels=None, **mc_labels_multi):
+                head_mask=None, inputs_embeds=None, mc_token_ids=None, lm_labels=None, mc_labels=None,
+                **cl_labels_multi):
         transformer_outputs = self.transformer(input_ids,
                                                past=past,
                                                attention_mask=attention_mask,
@@ -243,30 +242,35 @@ class GPT2DoubleHeadsModelwithAdversarialNew(GPT2PreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
+        cl_logits = {}
+        for input_name in cl_labels_multi.keys():
+            # reverse gradients, if head is adversarial (defaults to False)
+            _hidden_states = grad_reverse(hidden_states) if self.cl_is_adversarial.get(input_name, False) else hidden_states
+            # take only the last mc token id for classifier input
+            cl_logits[input_name] = self.cl_heads[input_name](_hidden_states, mc_token_ids[:, -1].unsqueeze(-1)).squeeze(-1)
 
-        # overwrite for default behaviour (positional arguments)
-        if mc_labels is not None:
-            mc_labels_multi['mc_labels'] = mc_labels
+        outputs = (lm_logits, mc_logits) + tuple(cl_logits.values()) + transformer_outputs[1:]
+        losses = ()
 
-        mc_logits = {}
-        for input_name in mc_labels_multi.keys():
-            # reverse gradients, if adv_labels_multi
-            _mc_token_ids = grad_reverse(hidden_states) if self.adv_labels_multi[input_name] else hidden_states
-            mc_logits[input_name] = self.multiple_choice_heads[input_name](hidden_states, mc_token_ids).squeeze(-1)
+        if len(cl_logits) > 0:
+            loss_fct = CrossEntropyLoss()
+            for input_name, logits in cl_logits.items():
+                loss = loss_fct(logits.view(-1, logits.size(-1)),
+                                cl_labels_multi[input_name].view(-1))
+                losses = losses + (loss,)
 
-        outputs = (lm_logits, ) + tuple(mc_logits.values()) + transformer_outputs[1:]
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
-            losses = []
-            for input_name, current_mc_logits in mc_logits.items():
-                losses.append(loss_fct(current_mc_logits.view(-1, current_mc_logits.size(-1)), mc_labels_multi[input_name].view(-1)))
-            outputs = tuple(losses) + outputs
+            loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)),
+                            mc_labels.view(-1))
+            losses = (loss, ) + losses
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
-            outputs = (loss,) + outputs
+            losses = (loss, ) + losses
 
-        return outputs  # (lm loss), (mc loss), lm logits, mc logits, presents, (all hidden_states), (attentions)
+        return losses + outputs  # (lm loss), (mc loss), (cl_loss_0, cl_loss_1, ...), lm logits, mc logits, (cl_logits_0, cl_logits_1, ...), presents, (all hidden_states), (attentions)
