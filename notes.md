@@ -297,6 +297,18 @@ Validation: {'accuracy': 0.08029197080291971,
  'average_ppl': 230.27264860459204,
  'nll': 5.439264035572971}
 
+cmd `CUDA_VISIBLE_DEVICES=0 python ./train.py --model gpt2 --dataset_path corpora/PersonaCHAT/personachat_self_original.json,corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --seed 42 >train0.log 2>&1`
+checkpoint `runs/Jan02_17-47-41_serv-9208`
+INFO:ignite.engine.engine.Engine:Engine run starting with max_epochs=1.
+INFO:ignite.engine.engine.Engine:Epoch[1] Complete. Time taken: 02:55:37
+Epoch: [595156/595156] 100%|██████████, loss=1.05 [44:23:49<00:00]INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 02:55:37
+Epoch: [595156/595156] 100%|██████████, loss=1.05 [44:23:49<00:00]
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 44:23:50
+Validation: {'accuracy': 0.862181750603977,
+ 'average_accuracy': 0.862181750603977,
+ 'average_nll': 1.4323864568538816,
+ 'average_ppl': 4.188683385935758,
+ 'nll': 1.4323864568538816}
 
 
 
