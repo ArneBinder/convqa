@@ -300,13 +300,15 @@ def main():
         #if model_class not in ADV_MODELS.values():
         assert model_class in ADV_MODELS, f'no adversarial model implemented for model class: {model_class.__name__}'
         model_class = ADV_MODELS[model_class]
-        if hasattr(model_config, 'cl_labels'):
-            assert all([dl in model_config.cl_labels['dataset_labels'] for dl in dataset_labels]), \
-                f'loaded dataset_labels [{model_config.cl_labels["dataset_labels"]}] do not contain all current dataset_labels [{dataset_labels}]'
-            dataset_labels = model_config.cl_labels['dataset_labels']
+        if not hasattr(model_config, 'cls'):
+            model_config.cls = {}
+        if 'dataset_labels' in model_config.cls:
+            assert all([dl in model_config.cls['dataset_labels']['labels'] for dl in dataset_labels]), \
+                f'loaded dataset_labels [{model_config.cls["dataset_labels"]["labels"]}] do not contain all ' \
+                f'current dataset_labels [{dataset_labels}]'
+            dataset_labels = model_config.cls['dataset_labels']['labels']
         else:
-            model_config.cl_labels = {'dataset_labels': dataset_labels}
-        model_config.cl_is_adversarial = {'dataset_labels': True}
+            model_config.cls['dataset_labels'] = {'labels': dataset_labels, 'is_adversarial': True}
         model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "dataset_labels", "token_type_ids"]
         # not yet used
         model_output_names = ["lm_loss", "mc_loss", "cl_loss_0", "lm_logits", "mc_logits", "cl_logits_0", "presents"]
@@ -468,7 +470,6 @@ def main():
     if args.adversarial_dataset_prediction:
         RunningAverage(output_transform=lambda x: x[1]).attach(trainer, "loss_w/_adv")
         RunningAverage(output_transform=lambda x: x[1]-x[0]).attach(trainer, "loss_only_adv")
-        # TODO: also adapt metrics below for adv_loss?
     metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-1), output_transform=lambda x: (x[0][0], x[1][0])),
                "accuracy": Accuracy(output_transform=lambda x: (x[0][1], x[1][1]))}
     metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args),
