@@ -18,8 +18,8 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, Output
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel, AdamW, \
     GPT2Config
 
-from convqa.modeling import GPT2MultiHeadsAdversarialClModel
-from convqa.utils import get_dataset
+from modeling import GPT2MultiHeadsAdversarialClModel
+from utils import get_dataset
 
 
 TYPE_BOS = "<bos>"
