@@ -120,21 +120,15 @@ def create_typed_utterance(utt, default_type, allow_not_an_utterance=False):
                          % (str(utt), str(default_type)))
 
 
-def get_dataset_token(dataset_path):
+def get_dataset_label(dataset_path):
     return f'<{os.path.basename(dataset_path)}>'
 
 
-def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=None):
+def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=None, dataset_labels=None):
     """ Prepare the dataset(s) for training and evaluation """
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     dataset_paths = args.dataset_path.split(',')
-    #background_token_id = tokenizer.special_tokens[TYPE_BACKGROUND]
-    # causes strange behaviour (at least in interact.py):
-    #bot_token_id = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED]) if not as_strings else TYPE_BOT
-    #user_token_id = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED]) if not as_strings else TYPE_USER
-    #bot_token_id = tokenizer.special_tokens[TYPE_BOT]
-    #user_token_id = tokenizer.special_tokens[TYPE_USER]
-    #eos_token_id = tokenizer.special_tokens[TYPE_EOS]
+
     background_token_id = tokenizer.convert_tokens_to_ids(TYPE_BACKGROUND)
     bot_token_id = tokenizer.convert_tokens_to_ids(TYPE_BOT)
     user_token_id = tokenizer.convert_tokens_to_ids(TYPE_USER)
@@ -143,11 +137,10 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
     for dataset_path in dataset_paths:
         dataset_id = None
         if args.adversarial_dataset_prediction:
-            dataset_token = get_dataset_token(dataset_path)
-            dataset_id = tokenizer.convert_tokens_to_ids(dataset_token)
-            assert dataset_id is not None, f'dataset_id for dataset={dataset_token} not found in vocabulary'
-            # TODO
-            raise NotImplementedError("translate dataset_id to [0, ..., num_datasets_in_vocab-1]")
+            dataset_label = get_dataset_label(dataset_path)
+            assert dataset_labels is not None, \
+                'no dataset_labels available, but it is required for adversarial_dataset_prediction'
+            dataset_id = dataset_labels.index(dataset_label)
 
         loaded_dataset = get_dataset(tokenizer, dataset_path, args.dataset_cache)
 
@@ -212,8 +205,8 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
                         n += 1
                     datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
-                    if args.adversarial_dataset_prediction:
-                        datasets[dataset_name]["cl_labels"].append([dataset_id] * num_candidates)
+                    if dataset_id is not None:
+                        datasets[dataset_name]["dataset_labels"].append(dataset_id)
                     #context = [context[-1]] + context[:-1]  # permuted personalities
             logger.warning('truncated %i of %i instances in %s' % (sum(counter_truncated.values()), n, dataset_name))
             logger.warning('num_trunc_tokens -> frequency: %s' % str(counter_truncated))
@@ -225,7 +218,7 @@ def get_data_loaders(args, tokenizer, model_input_names, max_sequence_length=Non
         for input_name in model_input_names:
             current_data = dataset[input_name]
             tensor = torch.tensor(current_data)
-            if input_name not in ["mc_labels", "cl_labels"]:
+            if input_name not in ["mc_labels", "dataset_labels"]:
                 tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
             tensor_datasets[dataset_name].append(tensor)
 
@@ -299,18 +292,24 @@ def main():
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
     additional_special_tokens = [TYPE_BACKGROUND, TYPE_BOT, TYPE_USER]
-    # for adversarial training
+    # for adversarial training (dataset prediction)
+    dataset_labels = None
     if args.adversarial_dataset_prediction:
-        dataset_tokens = [get_dataset_token(dataset_path) for dataset_path in args.dataset_path.split(',')]
-        additional_special_tokens.extend(dataset_tokens)
+        dataset_labels = [get_dataset_label(dataset_path) for dataset_path in args.dataset_path.split(',')]
+        #additional_special_tokens.extend(dataset_labels)
         #if model_class not in ADV_MODELS.values():
         assert model_class in ADV_MODELS, f'no adversarial model implemented for model class: {model_class.__name__}'
         model_class = ADV_MODELS[model_class]
-        model_config.cl_num_labels = {'cl_labels': len(dataset_tokens)}
-        model_config.cl_is_adversarial = {'cl_labels': True}
-        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "cl_labels", "token_type_ids"]
+        if hasattr(model_config, 'cl_labels'):
+            assert all([dl in model_config.cl_labels['dataset_labels'] for dl in dataset_labels]), \
+                f'loaded dataset_labels [{model_config.cl_labels["dataset_labels"]}] do not contain all current dataset_labels [{dataset_labels}]'
+            dataset_labels = model_config.cl_labels['dataset_labels']
+        else:
+            model_config.cl_labels = {'dataset_labels': dataset_labels}
+        model_config.cl_is_adversarial = {'dataset_labels': True}
+        model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "dataset_labels", "token_type_ids"]
         # not yet used
-        model_output_names = ["lm_loss", "mc_loss", "cl_loss_0_adv", "lm_logits", "mc_logits", "cl_logits_0_adv", "presents"]
+        model_output_names = ["lm_loss", "mc_loss", "cl_loss_0", "lm_logits", "mc_logits", "cl_logits_0", "presents"]
     else:
         model_input_names = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
         # not yet used
@@ -327,7 +326,8 @@ def main():
                                                       % (max_sequence_length, model_config.n_ctx)
     train_loader, val_loader, train_sampler, valid_sampler = get_data_loaders(args=args, tokenizer=tokenizer,
                                                                               model_input_names=model_input_names,
-                                                                              max_sequence_length=max_sequence_length)
+                                                                              max_sequence_length=max_sequence_length,
+                                                                              dataset_labels=dataset_labels)
 
     logger.info("Prepare pretrained model and optimizer - add special tokens for fine-tuning")
 
@@ -348,7 +348,7 @@ def main():
         torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
     #model = model_class.from_pretrained(args.model_checkpoint, num_cl_labels=len(dataset_ids))    # for GPT2DoubleHeadsModelwithAdversarial
-    model = model_class.from_pretrained(args.model_checkpoint)
+    model = model_class.from_pretrained(args.model_checkpoint, config=model_config)
     model.resize_token_embeddings(len(tokenizer))
     model.to(args.device)
 
@@ -435,7 +435,7 @@ def main():
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
             if args.adversarial_dataset_prediction:
-                input_ids, mc_token_ids, lm_labels, mc_labels, cl_labels, token_type_ids = batch
+                input_ids, mc_token_ids, lm_labels, mc_labels, dataset_labels, token_type_ids = batch
             else:
                 input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
 

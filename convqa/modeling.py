@@ -209,17 +209,18 @@ class GPT2MultiHeadsAdversarialClModel(GPT2PreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        if not hasattr(config, 'cl_num_labels'):
-            config.cl_num_labels = {}
+        if not hasattr(config, 'cl_labels'):
+            config.cl_labels = {}
         if not hasattr(config, 'cl_is_adversarial'):
             config.cl_is_adversarial = {}
         self.cl_is_adversarial = config.cl_is_adversarial
 
         _num_labels = config.num_labels
         self.cl_heads = {}
-        for input_name, num_labels in config.cl_num_labels.items():
-            config.num_labels = num_labels
+        for input_name, cl_labels in config.cl_labels.items():
+            config.num_labels = len(cl_labels)
             self.cl_heads[input_name] = SequenceSummary(config)
+            self.add_module(name=f'cl_head_{input_name}', module=self.cl_heads[input_name])
 
         config.num_labels = 1
 
@@ -240,6 +241,9 @@ class GPT2MultiHeadsAdversarialClModel(GPT2PreTrainedModel):
                                                inputs_embeds=inputs_embeds)
 
         hidden_states = transformer_outputs[0]
+        # take only the last candidate hidden state and mc token id for classifier input
+        hidden_states_cl = hidden_states[:, -1:]
+        cl_token_ids = mc_token_ids[:, -1:]
 
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
@@ -247,8 +251,7 @@ class GPT2MultiHeadsAdversarialClModel(GPT2PreTrainedModel):
         for input_name in cl_labels_multi.keys():
             # reverse gradients, if head is adversarial (defaults to False)
             _hidden_states = grad_reverse(hidden_states) if self.cl_is_adversarial.get(input_name, False) else hidden_states
-            # take only the last mc token id for classifier input
-            cl_logits[input_name] = self.cl_heads[input_name](_hidden_states, mc_token_ids[:, -1].unsqueeze(-1)).squeeze(-1)
+            cl_logits[input_name] = self.cl_heads[input_name](hidden_states_cl, cl_token_ids).squeeze(-1)
 
         outputs = (lm_logits, mc_logits) + tuple(cl_logits.values()) + transformer_outputs[1:]
         losses = ()
