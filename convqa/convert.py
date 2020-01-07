@@ -10,13 +10,14 @@ import numpy as np
 import plac
 from tqdm import tqdm
 
-from convqa.interact import create_sentencizer
+from utils import create_sentencizer
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
+
 
 # too large for memory
 def sample_neg_indices_old(n_instances, n_candidates):
@@ -81,6 +82,7 @@ def sample_neg_candidates(instances, n_candidates):
         logger.debug(e)
     return a
 
+
 def count_sentences(s, sentencizer, counter=None):
     s = s.strip()
     try:
@@ -92,6 +94,7 @@ def count_sentences(s, sentencizer, counter=None):
     if counter is not None:
         counter[len(sents)] +=1
     return len(sents)
+
 
 def create_instance_from_coqa(record, stats, sentencizer=None, max_sentences_qa=1, max_sentences_background=None):
     all_questions = []
@@ -189,7 +192,6 @@ def create_instance_from_squad(record, stats, sentencizer=None, max_sentences_qa
         instance['n_utterances'] += 1
 
     return instance, all_questions, all_answers, was_truncated
-
 
 
 def dataset_split_to_dialog(data, instance_builder=create_instance_from_coqa, n_candidates=20,
@@ -350,7 +352,6 @@ def convert_coqa(directory='/mnt/DATA/ML/data/corpora/QA/CoQA', create_question_
                              instance_builder=create_instance_from_coqa, max_sentences_qa=max_sentences_qa,
                              create_question_utterances=create_question_utterances, sentencizer=sentencizer)
     # stats: train: 7199; valid: 500
-
 
 
 def convert_squad(directory='/mnt/DATA/ML/data/corpora/QA/SQaAD', create_question_utterances=True, max_sentences_qa=1):

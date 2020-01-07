@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER
-from utils import get_dataset_personalities, download_pretrained_model
+from utils import get_dataset_personalities, download_pretrained_model, create_sentencizer
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
@@ -126,13 +126,8 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
                                                       'supported by the model (config.n_ctx [%i]). Please use a lower ' \
                                                       'value or do not set it [-1] to use the highest supported one.' \
                                                       % (max_sequence_length, model.config.n_ctx)
-    #special_tokens_ids = tokenizer.special_tokens.values()
-    special_tokens_ids = tokenizer.all_special_ids  # TODO: test this!
-    # causes strange behaviour:
-    #bot_token_id = tokenizer.special_tokens.get(TYPE_BOT, tokenizer.special_tokens[TYPE_BOT_DEPRECATED])
-    #user_token_id = tokenizer.special_tokens.get(TYPE_USER, tokenizer.special_tokens[TYPE_USER_DEPRECATED])
-    #bot_token_id = tokenizer.special_tokens[TYPE_BOT]
-    #user_token_id = tokenizer.special_tokens[TYPE_USER]
+
+    special_tokens_ids = tokenizer.all_special_ids
     bot_token_id = tokenizer.convert_tokens_to_ids(TYPE_BOT)
     user_token_id = tokenizer.convert_tokens_to_ids(TYPE_USER)
     #eos_token_id = tokenizer.eos_token_id
@@ -189,7 +184,6 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
         with capture_inputs_with_gradients(capture_at_module) as captured:
             logits = model(input_ids=input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
-            #if "gpt2" == args.model:
             logits = logits[0]
             logits_all = logits[0, -1, :] / args.temperature
             logits = top_filtering(logits_all.clone(), top_k=args.top_k, top_p=args.top_p)
@@ -216,13 +210,6 @@ def sample_sequence(tokenizer, model, args, background=None, personality=None, u
                 prev_prob = probs_all[prev]
                 #logger.debug('prob for current sample [%s]: %f' % (tokenizer.decode([prev.item()]), prev_prob.item()))
                 prev_prob.backward()
-                # expl_input_ids = get_embedding_explanations(weights=model.transformer.wte.weight, ids=input_ids[0], label='embedding')
-                # expl_token_type_ids = get_embedding_explanations(weights=model.transformer.wte.weight, ids=token_type_ids[0], label='type embedding')
-                # expl_position_ids = get_embedding_explanations(weights= model.transformer.wpe.weight, ids=position_ids[0], label='position embedding')
-                #explanations.append({ 'input_ids': expl_input_ids.detach().cpu().numpy(),
-                #    'token_type_ids': expl_token_type_ids.detach().cpu().numpy(),
-                #    'position_ids': expl_position_ids.detach().cpu().numpy(),
-                #})
 
         if explain:
             assert captured is not None, \
@@ -339,17 +326,22 @@ def process_coqa_file(tokenizer, model, args):
         background_sents = sentencizer(instance['story'])
         background_encoded = tokenizer.encode(' '.join([sentence.strip() for sentence in background_sents]))
         history_encoded = []
+        history_types_encoded = []
         for question in instance['questions']:
             n_total += 1
             question_text = question['input_text']
             history_encoded.append(tokenizer.encode(question_text))
+            history_types_encoded.append(tokenizer.convert_tokens_to_ids(TYPE_USER))
             with torch.no_grad():
                 try:
                     out_ids, _ = sample_sequence(background=background_encoded, utterances=history_encoded,
+                                                 utterance_types=history_types_encoded,
                                                  tokenizer=tokenizer,
                                                  model=model, args=args)
                     history_encoded.append(out_ids)
+                    history_types_encoded.append(tokenizer.convert_tokens_to_ids(TYPE_BOT))
                     history_encoded = history_encoded[-(2 * args.max_history + 1):]
+                    history_types_encoded = history_types_encoded[-(2 * args.max_history + 1):]
                     answer_text = tokenizer.decode(out_ids, skip_special_tokens=True)
                 except AssertionError as e:
                     logger.warning('ERROR (id: %s turn_id: %s): %s' % (instance['id'], question['turn_id'], e))
@@ -371,8 +363,9 @@ def process_coqa_file(tokenizer, model, args):
 def run_interactive(tokenizer, model, args):
     logger.info("Sample a personality")
     personalities = get_dataset_personalities(tokenizer, args.dataset_path, args.dataset_cache)
-    personality = chain(*random.choice(personalities))
+    personality = list(chain(*random.choice(personalities)))
     history_encoded = []
+    history_types_encoded = []
     logger.info("Selected personality: %s", tokenizer.decode(personality))
     while True:
         raw_text = input(">>> ")
@@ -380,26 +373,17 @@ def run_interactive(tokenizer, model, args):
             print('Prompt should not be empty!')
             raw_text = input(">>> ")
         history_encoded.append(tokenizer.encode(raw_text))
+        history_types_encoded.append(tokenizer.convert_tokens_to_ids(TYPE_USER))
         with torch.no_grad():
-            out_ids, _ = sample_sequence(personality=personality, utterances=history_encoded, tokenizer=tokenizer,
+            out_ids, _ = sample_sequence(personality=personality, utterances=history_encoded,
+                                         utterance_types=history_types_encoded, tokenizer=tokenizer,
                                          model=model, args=args)
         history_encoded.append(out_ids)
-        history_encoded = history_encoded[-(2*args.max_history+1):]
+        history_types_encoded.append(tokenizer.convert_tokens_to_ids(TYPE_BOT))
+        history_encoded = history_encoded[-(2 * args.max_history + 1):]
+        history_types_encoded = history_types_encoded[-(2 * args.max_history + 1):]
         out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
         print(out_text)
-
-
-def create_sentencizer(spacy_model='en_core_web_sm'):
-    import spacy
-    nlp = spacy.load(spacy_model)
-    nlp.add_pipe(nlp.create_pipe('sentencizer'))
-    #sentencizer = lambda s: [sent.text for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents]
-    def sentencizer(s):
-        sents = []
-        for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents:
-            sents.extend([_sent.strip() for _sent in sent.text.split('\n\n') if _sent.strip() != ''])
-        return sents
-    return sentencizer
 
 
 if __name__ == "__main__":

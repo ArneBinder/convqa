@@ -16,6 +16,7 @@ HF_FINETUNED_MODEL = "https://s3.amazonaws.com/models.huggingface.co/transfer-le
 
 logger = logging.getLogger(__file__)
 
+
 def download_pretrained_model():
     """ Download and extract finetuned model from S3 """
     resolved_archive_file = cached_path(HF_FINETUNED_MODEL)
@@ -65,10 +66,12 @@ def get_dataset(tokenizer, dataset_path, dataset_cache=None, as_strings=False):
             torch.save(dataset, dataset_cache)
     return dataset
 
+
 def get_dataset_personalities(tokenizer, dataset_path, dataset_cache=None):
     """ Get personalities from PERSONACHAT """
     dataset_path = dataset_path or PERSONACHAT_URL
-    dataset_cache = dataset_cache + '_' + dataset_path.split('/')[-1].replace('.json', '') + '_' + type(tokenizer).__name__  # Do avoid using GPT cache for GPT-2 and vice-versa
+    os.makedirs(dataset_cache, exist_ok=True)
+    dataset_cache = dataset_cache + '/' + dataset_path.split('/')[-1].replace('.json', '') + '_' + type(tokenizer).__name__  # Do avoid using GPT cache for GPT-2 and vice-versa
     if os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         personachat = torch.load(dataset_cache)
@@ -97,7 +100,21 @@ def get_dataset_personalities(tokenizer, dataset_path, dataset_cache=None):
     logger.info("Gathered {} personalities".format(len(personalities)))
     return personalities
 
+
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+
+def create_sentencizer(spacy_model='en_core_web_sm'):
+    import spacy
+    nlp = spacy.load(spacy_model)
+    nlp.add_pipe(nlp.create_pipe('sentencizer'))
+    #sentencizer = lambda s: [sent.text for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents]
+    def sentencizer(s):
+        sents = []
+        for sent in nlp(s.strip(), disable=['parser', 'tagger', 'ner']).sents:
+            sents.extend([_sent.strip() for _sent in sent.text.split('\n\n') if _sent.strip() != ''])
+        return sents
+    return sentencizer
