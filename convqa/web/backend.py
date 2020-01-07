@@ -22,8 +22,8 @@ from flask import Flask, jsonify, Response, request, render_template, send_from_
 
 # Add the parent folder path to the sys.path list
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from convqa.interact import get_args, load_model, sample_sequence, norm_expl
-from convqa.train import TYPE_BOT, TYPE_USER
+from interact import get_args, load_model, sample_sequence, norm_expl
+from train import TYPE_BOT, TYPE_USER
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
