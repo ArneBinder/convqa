@@ -40,3 +40,12 @@ curl -X GET \
 "explain": false
 }'
 ```
+NOTE: The `Accept: application/json` header is mandatory!  
+See this [Postman](https://www.getpostman.com/) collection for further API calls: [postman/convqa.postman_collection.json](postman/convqa.postman_collection.json)
+
+## Interactive CLI
+
+Start interactive CLI to simply chat with a random "personality":
+```bash
+python convqa/interactive.py --model gpt2 --model_checkpoint runs/Jan02_17-47-41_serv-9208 --max_history 2
+```

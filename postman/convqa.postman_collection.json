@@ -1,0 +1,187 @@
+{
+	"info": {
+		"_postman_id": "d74a0047-7e55-4df0-8ba9-075a49ad0883",
+		"name": "convqa",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "relaod",
+			"item": [
+				{
+					"name": "CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://convqa.dfki.de/reload?model_type=gpt2&model_checkpoint=Jan06_16-02-04_serv-9208",
+							"protocol": "http",
+							"host": [
+								"convqa",
+								"dfki",
+								"de"
+							],
+							"path": [
+								"reload"
+							],
+							"query": [
+								{
+									"key": "model_type",
+									"value": "gpt2"
+								},
+								{
+									"key": "model_checkpoint",
+									"value": "Jan06_16-02-04_serv-9208"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CoQA + personaCHAT + SQuAD",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://convqa.dfki.de/reload?model_type=gpt2&model_checkpoint=Jan02_17-47-41_serv-9208",
+							"protocol": "http",
+							"host": [
+								"convqa",
+								"dfki",
+								"de"
+							],
+							"path": [
+								"reload"
+							],
+							"query": [
+								{
+									"key": "model_type",
+									"value": "gpt2"
+								},
+								{
+									"key": "model_checkpoint",
+									"value": "Jan02_17-47-41_serv-9208"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "ask",
+			"item": [
+				{
+					"name": "catholic church",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\"utterances\": [\n\t\"How many members has the catholic church?\"\n]\n}"
+						},
+						"url": {
+							"raw": "http://0.0.0.0:5000/ask",
+							"protocol": "http",
+							"host": [
+								"0",
+								"0",
+								"0",
+								"0"
+							],
+							"port": "5000",
+							"path": [
+								"ask"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "catholic church (multi turn)",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\"utterances\": [\n\t\"How many members has the catholic church?\",\n\t\"more than 1.29 billion\",\n\t\"Who is its boss?\",\n\t\"Bishop of Rome\",\n\t\"Who is that currently?\"\n]\n}"
+						},
+						"url": {
+							"raw": "http://0.0.0.0:5000/ask",
+							"protocol": "http",
+							"host": [
+								"0",
+								"0",
+								"0",
+								"0"
+							],
+							"port": "5000",
+							"path": [
+								"ask"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "catholic church (explain)",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\"utterances\": [\n\t\"How many members has the catholic church?\"\n],\n\"explain\": false\n}"
+						},
+						"url": {
+							"raw": "http://0.0.0.0:5000/ask",
+							"protocol": "http",
+							"host": [
+								"0",
+								"0",
+								"0",
+								"0"
+							],
+							"port": "5000",
+							"path": [
+								"ask"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		}
+	],
+	"protocolProfileBehavior": {}
+}
