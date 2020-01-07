@@ -24,16 +24,15 @@ This will produce model checkpoint files etc. in `runs/<timestamp>`.
 
 Start the backend API by calling (set correct model checkpoint!):
 ```bash 
-python convqa/web/backend.py --model gpt2 --model_checkpoint runs/<timestamp> --max_history 2 --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service
+python convqa/web/backend.py --model gpt2 --model_checkpoint runs/<timestamp> --max_history 2 --entity_linking_service_url http://cloud.science-miner.com/nerd/service
 ```
 
-Call the API ike the following:
+Call the API like:
 ```
 curl -X GET \
   http://0.0.0.0:5000/ask \
   -H 'Accept: application/json' \
   -H 'Content-Type: text/plain' \
-  -H 'cache-control: no-cache' \
   -d '{
 "utterances": [
 	"How many members has the catholic church?"
