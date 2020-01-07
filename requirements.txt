@@ -1,5 +1,5 @@
 # RECOMMENDATION: create conda environment and install newest transformers afterwards:
-#   conda create -n convqa python=3 pytorch ignite tensorflow tensorboardx=1.6 scikit-learn blas=*=mkl flask eventlet -c pytorch -c conda-forge
+#   conda create -n convqa python=3 pytorch ignite tensorflow tensorboardx=1.6 scikit-learn blas=*=mkl flask eventlet plac -c pytorch -c conda-forge
 #   conda activate convqa
 #   pip install transformers
 # NOTE: tensorboardx > 1.6 breaks ignite=0.2.0
@@ -45,6 +45,12 @@ tensorflow  # for tensorboardX
 # api (+static frontend)
 flask # for interact endpoint
 eventlet # for interact endpoint (deploy)
+
+# data conversion
+plac
+# Spacy is only required if max_sentences_qa >= 0. This also requires a spacy model (see parameter --spacy_model).
+spacy
+
 
 #  frontent_only
 flask-socketio # for frontent_only (requires flink middleware, see https://github.com/ArneBinder/convqa-flink)
