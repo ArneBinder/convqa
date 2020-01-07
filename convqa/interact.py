@@ -16,8 +16,8 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from convqa.train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER
-from convqa.utils import get_dataset_personalities, download_pretrained_model
+from train import MODELS, build_input_from_segments, TYPE_BACKGROUND, TYPE_BOT, TYPE_USER
+from utils import get_dataset_personalities, download_pretrained_model
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
