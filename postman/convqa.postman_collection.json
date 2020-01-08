@@ -14,13 +14,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "http://convqa.dfki.de/reload?model_type=gpt2&model_checkpoint=Jan06_16-02-04_serv-9208",
+							"raw": "http://0.0.0.0:5000/reload?model_type=gpt2&model_checkpoint=Jan06_16-02-04_serv-9208",
 							"protocol": "http",
 							"host": [
-								"convqa",
-								"dfki",
-								"de"
+								"0",
+								"0",
+								"0",
+								"0"
 							],
+							"port": "5000",
 							"path": [
 								"reload"
 							],
@@ -44,13 +46,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "http://convqa.dfki.de/reload?model_type=gpt2&model_checkpoint=Jan02_17-47-41_serv-9208",
+							"raw": "http://0.0.0.0:5000/reload?model_type=gpt2&model_checkpoint=Jan02_17-47-41_serv-9208",
 							"protocol": "http",
 							"host": [
-								"convqa",
-								"dfki",
-								"de"
+								"0",
+								"0",
+								"0",
+								"0"
 							],
+							"port": "5000",
 							"path": [
 								"reload"
 							],
