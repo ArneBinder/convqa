@@ -18,7 +18,7 @@ example train command (requires around 10gb of memory):
 ```bash
 python convqa/train.py convqa/train.py --model gpt2 --dataset_path datasets/examples/personachat_self_original_extract10.json,datasets/examples/coqa_converted_dialog_sentsqa1_questionutterances_extract10.json,datasets/examples/squad_2.0_converted_dialog_sentsqa1_questionutterances_extract10.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 1 --num_candidates 4 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --seed 42
 ```
-This will produce model checkpoint files etc. in `runs/<timestamp>`.
+This will produce model checkpoint files etc. in `runs/<TIMESTAMP>_<COMPUTER_NAME>`.
 
 ## Backend API
 
