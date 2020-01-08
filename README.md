@@ -24,7 +24,7 @@ This will produce model checkpoint files etc. in `runs/<timestamp>`.
 
 Start the backend API by calling (set correct model checkpoint!):
 ```bash 
-python convqa/web/backend.py --model gpt2 --model_checkpoint runs/<timestamp> --max_history 2 --entity_linking_service_url http://cloud.science-miner.com/nerd/service
+python convqa/web/backend.py --model gpt2 --model_checkpoint runs/<CHECKPOINT_DIRECTORY> --max_history 2 --entity_linking_service_url http://cloud.science-miner.com/nerd/service
 ```
 
 Call the API like:
@@ -47,5 +47,5 @@ See this [Postman](https://www.getpostman.com/) collection for further API calls
 
 Start an interactive CLI to simply chat with a random "personality":
 ```bash
-python convqa/interactive.py --model gpt2 --model_checkpoint runs/Jan02_17-47-41_serv-9208 --max_history 2
+python convqa/interactive.py --model gpt2 --model_checkpoint runs/<CHECKPOINT_DIRECTORY> --max_history 2
 ```
