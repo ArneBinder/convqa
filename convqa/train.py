@@ -16,7 +16,7 @@ from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Tokenizer, GPT2LMHeadModel, GPT2DoubleHeadsModel, AdamW, \
-    GPT2Config
+    GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 from modeling import GPT2MultiHeadsAdversarialClModel
 from utils import get_dataset
@@ -238,7 +238,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="", help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
-    parser.add_argument("--model", type=str, default="", help="Model type, one of: %s" % ', '.join(MODELS.keys()))
+    parser.add_argument("--model", type=str, help="Model type, one of: %s" % ', '.join(MODELS.keys()))
     parser.add_argument("--model_checkpoint", type=str, default="", help="Path, url or short name of a pretrained model")
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
     parser.add_argument("--max_history", type=int, default=2, help="Number of previous exchanges to keep in history")
@@ -278,15 +278,17 @@ def main():
     args.distributed = (args.local_rank != -1)
 
     logger.info("Prepare tokenizer and data")
-    if not args.model:
-        logger.warning('"model" parameter is not set! This is deprecated. Please use one of: %s. '
-                       'To mimic deprecated behaviour, "model_checkpoint" will be used as "model"' % ', '.join(MODELS.keys()))
-        args.model = args.model_checkpoint
-    if args.model not in MODELS:
-        raise NotImplementedError('model "%s" not implemented. use one of: %s' % (args.model, ', '.join(MODELS.keys())))
-    config_class, tokenizer_class, model_class, _ = MODELS[args.model]
+
     if not args.model_checkpoint:
         args.model_checkpoint = args.model
+    model_super_type = None
+    if args.model in GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP:
+        model_super_type = 'gpt2'
+    assert model_super_type is not None, f'unknown model class: "{args.model}". use one of: {", ".join(GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())}'
+
+    if model_super_type not in MODELS:
+        raise NotImplementedError(f'model type "{model_super_type}" not implemented. use one of: {", ".join(MODELS.keys())}')
+    config_class, tokenizer_class, model_class, _ = MODELS[model_super_type]
 
     model_config = config_class.from_pretrained(args.model_checkpoint)
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
