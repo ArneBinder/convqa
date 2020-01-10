@@ -250,6 +250,8 @@ def norm_expl(expl, _min=None, square=False):
 def load_model(model_checkpoint, model_type):
     if model_checkpoint == "":
         model_checkpoint = download_pretrained_model()
+    else:
+        assert os.path.exists(model_checkpoint), f'checkpoint directory not found: {model_checkpoint}'
 
     logger.info("Get pretrained model and tokenizer")
     if model_type not in MODELS:
