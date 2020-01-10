@@ -312,7 +312,7 @@ Validation: {'accuracy': 0.862181750603977,
  'nll': 1.4323864568538816}
 ```
 
-### train with transformers @ CoQA + personaCHAT + SQuAD w/ adversarial dataset prediciton
+### train with transformers @ CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction
 git repo `https://github.com/arnebinder/convqa`
 git branch `master`
 git commit `2f7b4f4ad30ba83f125aa2113b55098d4e24225e`
@@ -333,6 +333,11 @@ Validation: {'accuracy': 0.8623304218546739,
  'nll': 1.429669249014005}
 ```
 -> slight improvement over training w/o adversarial dataset prediction
+
+### multiple epochs (5) with distilgpt2 (CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction)
+commit `4ed11a1ac1a6291d67b527205944045f3425163b`
+cmd `CUDA_VISIBLE_DEVICES=7 python ./convqa/train.py --model distilgpt2 --dataset_path corpora/PersonaCHAT/personachat_self_original.json,corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 5 --num_candidates 4 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --seed 42 --adversarial_dataset_prediction >train.log 2>&1`
+...
 
 ## general
 start server @gpu0 @ screen train1:
