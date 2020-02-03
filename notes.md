@@ -337,7 +337,35 @@ Validation: {'accuracy': 0.8623304218546739,
 ### multiple epochs (5) with distilgpt2 (CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction)
 commit `4ed11a1ac1a6291d67b527205944045f3425163b`
 cmd `CUDA_VISIBLE_DEVICES=7 python ./convqa/train.py --model distilgpt2 --dataset_path corpora/PersonaCHAT/personachat_self_original.json,corpora/CoQA/coqa_converted_dialog_sentsqa1_questionutterances.json,corpora/SQuAD/squad_2.0_converted_dialog_sentsqa1_questionutterances.json --gradient_accumulation_steps 4 --lm_coef 2.0 --max_history 2 --max_norm 1.0 --mc_coef 1.0 --n_epochs 5 --num_candidates 4 --train_batch_size 1 --valid_batch_size 1 --lr 6.25e-05 --max_sequence_length 512 --seed 42 --adversarial_dataset_prediction >train.log 2>&1`
-...
+run: `Jan10_14-34-54_serv-9208` @gpu8
+```
+INFO:ignite.engine.engine.Engine:Engine run complete. Time taken 139:19:17
+Validation: {'accuracy': 0.8102583162980859,
+ 'average_accuracy': 0.8102583162980859,
+ 'average_nll': 1.7905438591308978,
+ 'average_ppl': 5.992710770745011,
+ 'nll': 1.7905438591308978}
+Validation: {'accuracy': 0.8405500836275785,
+ 'average_accuracy': 0.8405500836275785,
+ 'average_nll': 1.7305162981862172,
+ 'average_ppl': 5.64356691973684,
+ 'nll': 1.7305162981862172}
+Validation: {'accuracy': 0.848578331165211,
+ 'average_accuracy': 0.848578331165211,
+ 'average_nll': 1.7259845980946646,
+ 'average_ppl': 5.618049828581033,
+ 'nll': 1.7259845980946646}
+Validation: {'accuracy': 0.8602118565322431,
+ 'average_accuracy': 0.8602118565322431,
+ 'average_nll': 1.691038310991782,
+ 'average_ppl': 5.425110733871651,
+ 'nll': 1.691038310991782}
+Validation: {'accuracy': 0.8601375209068947,
+ 'average_accuracy': 0.8601375209068947,
+ 'average_nll': 1.6736983913459744,
+ 'average_ppl': 5.331850647597122,
+ 'nll': 1.6736983913459744}
+```
 
 ## general
 start server @gpu0 @ screen train1:

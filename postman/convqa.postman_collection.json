@@ -41,6 +41,38 @@
 					"response": []
 				},
 				{
+					"name": "CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction DistilGPT2 5epochs",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://0.0.0.0:5000/reload?model_type=gpt2&model_checkpoint=Jan10_14-34-54_serv-9208",
+							"protocol": "http",
+							"host": [
+								"0",
+								"0",
+								"0",
+								"0"
+							],
+							"port": "5000",
+							"path": [
+								"reload"
+							],
+							"query": [
+								{
+									"key": "model_type",
+									"value": "gpt2"
+								},
+								{
+									"key": "model_checkpoint",
+									"value": "Jan10_14-34-54_serv-9208"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "CoQA + personaCHAT + SQuAD",
 					"request": {
 						"method": "POST",
