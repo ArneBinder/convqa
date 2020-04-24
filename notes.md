@@ -377,6 +377,13 @@ CUDA_VISIBLE_DEVICES=0 python convqa/web/backend.py --model gpt2 --model_checkpo
 # load with wikipedia_dump (breaks visualisation of explanations in BBDC2 demo)
 #CUDA_VISIBLE_DEVICES=0 python convqa/web/backend.py --model gpt2 --model_checkpoint runs/Jan08_13-19-54_serv-9208 --max_history 2 --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service --port 8100 --deploy
 ```
+currently running:
+* trained with adversarial dataset prediction
+* no sampling
+* no wikipedia_dump
+```
+CUDA_VISIBLE_DEVICES=0 python convqa/web/backend.py --model gpt2 --model_checkpoint runs/Jan08_13-19-54_serv-9208 --max_history 2 --no_sample --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service --port 8100 --deploy
+```
 
 ## ideas
  * improve context fetching:
