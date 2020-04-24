@@ -368,11 +368,12 @@ Validation: {'accuracy': 0.8601375209068947,
 ```
 
 ## general
-start server @gpu0 @ screen train1:
+start server @gpu0:
 ```
-screen -S convqa_backend_GPU1
+screen -S convqa_backend_GPU0
 conda activate convqa
-CUDA_VISIBLE_DEVICES=1 python web/backend.py --model gpt2 --model_checkpoint runs/Jul15_21-05-16_serv-9200 --max_history 2 --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service --port 8100 --deploy
+# start latest model trained @ CoQA + personaCHAT + SQuAD w/ adversarial dataset prediction
+CUDA_VISIBLE_DEVICES=0 python convqa/web/backend.py --model gpt2 --model_checkpoint runs/Jan08_13-19-54_serv-9208 --max_history 2 --wikipedia_dump ~/datasets/wikipedia_hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts_converted.pickle --entity_linking_service_url http://lns-87247.sb.dfki.de:8090/service --port 8100 --deploy
 ```
 
 ## ideas
