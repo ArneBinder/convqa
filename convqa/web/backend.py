@@ -461,7 +461,8 @@ def reload_model():
     return response
 
 
-def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud.science-miner.com/nerd/service'):
+def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud.science-miner.com/nerd/service',
+                                     lang='en'):
     url_disambiguate = base_url + "/disambiguate"
     wikipedia_data = None
     if wikipedia_file:
@@ -478,6 +479,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud
     }
 
     wikipedia_base_uri = "https://en.wikipedia.org/wiki?curid="
+    # TODO: check that language (lang) matches wikipedia_base_uri?
 
     def _context_fetcher(s, previous_context=None):
         logger.info('fetch context for "%s"...' % s)
@@ -485,7 +487,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud
         if len(s) == 0:
             logger.warning('input for context_fetcher is an empty string')
             return res
-        query = {'text': s, "language": {"lang": "en"}}
+        query = {'text': s, "language": {"lang": lang}}
         files = {'query': (None, json.dumps(query))}
         response = requests.post(url_disambiguate, headers=headers, files=files, timeout=60)
         if response.status_code != 200:
@@ -530,7 +532,7 @@ def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud
                     res_current_entity = []
                     #assert len(response_entity_data['definitions']) > 0, 'no definitions found for entity: %s' % entity['rawName']
                     for definition in response_entity_data['definitions']:
-                        if definition.get('lang', '') == 'en':
+                        if definition.get('lang', '') == lang:
                             definition_cleaned = definition['definition']
                             # remove links, e.g. "[[Western civilisation]]" or "the [[Diocese of Rome|Bishop of Rome]]"
                             definition_cleaned = re.sub(r"\[\[(?:[^\]]*?\|)?([^\]]*?)\]\]", r"\1", definition_cleaned)
@@ -541,6 +543,12 @@ def create_wikipedia_context_fetcher(wikipedia_file=None, base_url='http://cloud
                 else:
                     # overwrite all except 'text'
                     res[wikipedia_entity_uri].update(entity)
+
+        for k in list(res.keys()):
+            if 'text' not in res[k]:
+                logger.warning(f'Entity data for {k} does not contain any definition for language={lang}. This entity '
+                               f'will be discarded.')
+                del res[k]
 
         assert len(res) > 0, 'no context found (entities found: %s)' % str([entity['rawName'] for entity in response_data.get('entities', [])])
         return res
